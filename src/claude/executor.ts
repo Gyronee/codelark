@@ -1,7 +1,7 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { logger } from '../logger.js';
-import { type ToolStatus } from '../feishu/cards.js';
+import { type ToolStatus } from '../card/builder.js';
 
 export interface ExecutionCallbacks {
   onText: (fullText: string) => void;
