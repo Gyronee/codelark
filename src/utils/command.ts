@@ -1,5 +1,5 @@
 export interface ParsedCommand {
-  type: 'project' | 'reset' | 'cancel' | 'status' | 'whoami' | 'help';
+  type: 'project' | 'reset' | 'cancel' | 'status' | 'whoami' | 'help' | 'model';
   action: string | null;
   args: string[];
 }
@@ -28,6 +28,10 @@ export function parseCommand(text: string): ParsedCommand | null {
       return { type: 'whoami', action: null, args: [] };
     case '/help':
       return { type: 'help', action: null, args: [] };
+    case '/model': {
+      const args = parts.slice(1);
+      return { type: 'model', action: args[0] || null, args };
+    }
     default:
       return null;
   }

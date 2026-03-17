@@ -1,7 +1,37 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { readdirSync, existsSync } from 'fs';
+import { join } from 'path';
 import { logger } from '../logger.js';
 import { type ToolStatus, extractThinkingContent, stripThinkingTags } from '../card/builder.js';
+
+function getLocalPlugins(): Array<{ type: 'local'; path: string }> {
+  // Plugins are cached at ~/.claude/plugins/cache/<marketplace>/<plugin-name>/<version>/
+  // Each version dir contains .claude-plugin/plugin.json
+  const cacheDir = join(process.env.HOME || '', '.claude', 'plugins', 'cache');
+  if (!existsSync(cacheDir)) return [];
+  const plugins: Array<{ type: 'local'; path: string }> = [];
+  try {
+    for (const marketplace of readdirSync(cacheDir)) {
+      const mpDir = join(cacheDir, marketplace);
+      for (const pluginName of readdirSync(mpDir)) {
+        const pluginDir = join(mpDir, pluginName);
+        // Find the latest version directory that has .claude-plugin/plugin.json
+        const versions = readdirSync(pluginDir).filter(v =>
+          existsSync(join(pluginDir, v, '.claude-plugin', 'plugin.json'))
+        );
+        if (versions.length > 0) {
+          // Sort to get the latest version (lexicographic works for semver and hashes)
+          versions.sort();
+          const latestDir = join(pluginDir, versions[versions.length - 1]);
+          plugins.push({ type: 'local', path: latestDir });
+        }
+      }
+    }
+  } catch { /* ignore */ }
+  logger.info({ count: plugins.length, paths: plugins.map(p => p.path) }, 'Loading plugins');
+  return plugins;
+}
 
 export interface ExecutionCallbacks {
   onText: (fullText: string) => void;
@@ -30,6 +60,7 @@ export async function executeClaudeTask(
   resumeSessionId: string | null,
   abortController: AbortController,
   callbacks: ExecutionCallbacks,
+  model?: string,
 ): Promise<void> {
   const startTime = Date.now();
   let fullText = '';
@@ -46,6 +77,7 @@ export async function executeClaudeTask(
         cwd,
         ...(resumeSessionId ? { resume: resumeSessionId } : {}),
         abortController,
+        model: model || process.env.CLAUDE_MODEL || 'claude-opus-4-6',
         allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
         permissionMode: 'default',
         canUseTool: async (toolName, input, _options) => {
@@ -63,8 +95,10 @@ export async function executeClaudeTask(
           return { behavior: 'deny' as const, message: 'User denied the operation' };
         },
         systemPrompt: { type: 'preset', preset: 'claude_code' },
-        settingSources: ['project'],
+        settingSources: ['user', 'project', 'local'],
+        plugins: getLocalPlugins(),
         includePartialMessages: true,
+        stderr: (data: string) => { logger.debug({ stderr: data.slice(0, 200) }, 'Claude stderr'); },
       },
     });
 

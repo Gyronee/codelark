@@ -12,6 +12,7 @@ import { requestPermission } from './card-actions.js';
 import * as registry from '../../channel/active-registry.js';
 import { buildQueueKey } from '../../channel/chat-queue.js';
 import { getRecentHistory, formatHistoryContext } from '../../channel/chat-history.js';
+import { getUserModel, setUserModel, listModels } from '../../channel/user-model.js';
 import { logger } from '../../logger.js';
 
 export async function dispatch(
@@ -57,7 +58,8 @@ async function handleCommand(
         '/whoami — 查看你的 open_id', '',
         '💬 会话：',
         '/reset — 重置当前对话上下文',
-        '/cancel — 取消正在执行的任务', '',
+        '/cancel — 取消正在执行的任务',
+        '/model — 查看/切换模型（opus, sonnet, haiku）', '',
         '📁 项目管理：',
         '/project list — 列出所有项目',
         '/project use <名称> — 切换到指定项目',
@@ -91,6 +93,21 @@ async function handleCommand(
     case 'project':
       await handleProjectCommand(cmd, ctx, db, projectManager, reply);
       break;
+    case 'model': {
+      if (!cmd.action) {
+        const current = getUserModel(ctx.senderId);
+        const models = listModels();
+        await reply(`当前模型: ${current}\n\n可用模型:\n${models.map(m => `• ${m}`).join('\n')}\n\n用法: /model <名称>\n快捷: /model opus, /model sonnet, /model haiku`);
+      } else {
+        const resolved = setUserModel(ctx.senderId, cmd.action);
+        if (resolved) {
+          await reply(`模型已切换为: ${resolved}`);
+        } else {
+          await reply(`无效模型: ${cmd.action}\n可用: ${listModels().join(', ')}\n快捷: opus, sonnet, haiku`);
+        }
+      }
+      break;
+    }
   }
 }
 
@@ -183,6 +200,8 @@ async function handleClaudeTask(
     }
   }
 
+  const userModel = getUserModel(ctx.senderId);
+
   await executeClaudeTask(prompt, projectPath, session.claude_session_id, abortController, {
     onText: (fullText) => { void card.scheduleStreamText(fullText); },
     onToolStart: (tool, detail) => {
@@ -223,5 +242,5 @@ async function handleClaudeTask(
         else await card.error(CardBuilder.error(projectName, error, Date.now() - startTime));
       }
     },
-  });
+  }, userModel);
 }
