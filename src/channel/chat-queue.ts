@@ -7,9 +7,9 @@ export class ChatQueue {
 
   enqueue(key: string, task: () => Promise<void>): void {
     const prev = this.queues.get(key) ?? Promise.resolve();
-    const next = prev.then(task, task).then(
-      () => this.cleanup(key, next),
-      () => this.cleanup(key, next),
+    const next: Promise<void> = prev.then(task, task).then(
+      (): void => this.cleanup(key, next),
+      (): void => this.cleanup(key, next),
     );
     this.queues.set(key, next);
   }
