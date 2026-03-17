@@ -1,7 +1,7 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { logger } from '../logger.js';
-import { type ToolStatus } from '../card/builder.js';
+import { type ToolStatus, extractThinkingContent, stripThinkingTags } from '../card/builder.js';
 
 export interface ExecutionCallbacks {
   onText: (fullText: string) => void;
@@ -14,6 +14,8 @@ export interface ExecutionCallbacks {
 
 export interface ExecutionResult {
   text: string;
+  reasoningText: string;
+  reasoningElapsedMs: number;
   sessionId: string;
   toolCount: number;
   durationMs: number;
@@ -33,6 +35,9 @@ export async function executeClaudeTask(
   let fullText = '';
   let toolCount = 0;
   let sessionId = '';
+  let reasoningStartTime: number | null = null;
+  let reasoningElapsedMs = 0;
+  let wasInReasoning = false;
 
   try {
     const conversation = query({
@@ -72,9 +77,27 @@ export async function executeClaudeTask(
           const evt = (message as any).event;
           if (evt?.type === 'content_block_delta' && evt?.delta?.type === 'text_delta') {
             fullText += evt.delta.text;
-            callbacks.onText(fullText);
+            // Detect reasoning phase (text contains unclosed <think> tags)
+            const hasThinkingTag = /<\s*(?:think(?:ing)?|thought|antthinking)\s*>/i.test(fullText);
+            const hasClosingTag = /<\s*\/\s*(?:think(?:ing)?|thought|antthinking)\s*>/i.test(fullText);
+            const isInReasoning = hasThinkingTag && !hasClosingTag;
+
+            if (isInReasoning && !reasoningStartTime) {
+              reasoningStartTime = Date.now();
+            }
+            if (wasInReasoning && !isInReasoning && reasoningStartTime) {
+              reasoningElapsedMs = Date.now() - reasoningStartTime;
+            }
+            wasInReasoning = isInReasoning;
+
+            // For display: during reasoning show inline indicator, otherwise strip tags
+            if (isInReasoning) {
+              const thinkContent = extractThinkingContent(fullText);
+              callbacks.onText(`💭 **Thinking...**\n\n${thinkContent}`);
+            } else {
+              callbacks.onText(stripThinkingTags(fullText));
+            }
           }
-          // Capture session_id from stream events
           if ((message as any).session_id) {
             sessionId = (message as any).session_id;
           }
@@ -115,9 +138,13 @@ export async function executeClaudeTask(
         case 'result': {
           sessionId = message.session_id;
           if (message.subtype === 'success') {
-            const resultText = fullText || (typeof message.result === 'string' ? message.result : '');
+            const rawResult = fullText || (typeof message.result === 'string' ? message.result : '');
+            const resultText = stripThinkingTags(rawResult);
+            const finalReasoningText = extractThinkingContent(rawResult);
             callbacks.onComplete({
               text: resultText,
+              reasoningText: finalReasoningText,
+              reasoningElapsedMs,
               sessionId,
               toolCount,
               durationMs: Date.now() - startTime,
@@ -137,7 +164,9 @@ export async function executeClaudeTask(
     }
 
     callbacks.onComplete({
-      text: fullText || 'Task completed.',
+      text: stripThinkingTags(fullText) || 'Task completed.',
+      reasoningText: extractThinkingContent(fullText),
+      reasoningElapsedMs,
       sessionId,
       toolCount,
       durationMs: Date.now() - startTime,

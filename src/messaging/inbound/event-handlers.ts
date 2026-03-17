@@ -10,6 +10,7 @@ import { dispatch } from './dispatch.js';
 import { ChatQueue, buildQueueKey } from '../../channel/chat-queue.js';
 import * as registry from '../../channel/active-registry.js';
 import { fetchMessageContent } from '../outbound/send.js';
+import { recordMessage } from '../../channel/chat-history.js';
 import { logger } from '../../logger.js';
 
 export interface PipelineDeps {
@@ -76,7 +77,12 @@ export function createPipeline(deps: PipelineDeps): {
         const ctx = parseMessageEvent(data, deps.botOpenId);
         logger.info({ eventId, chatId: ctx.chatId, text: ctx.text.slice(0, 50) }, 'Processing message');
 
-        // Stage 3b: Resolve quoted message content (if replying to a message)
+        // Stage 3b: Record to chat history (for group context, before gate)
+        if (ctx.chatType === 'group') {
+          recordMessage(ctx.chatId, ctx.senderName || ctx.senderId, ctx.text);
+        }
+
+        // Stage 3c: Resolve quoted message content (if replying to a message)
         if (ctx.parentMessageId) {
           ctx.quotedContent = await fetchMessageContent(ctx.parentMessageId);
         }

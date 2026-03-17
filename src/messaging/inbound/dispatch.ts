@@ -11,6 +11,7 @@ import { executeClaudeTask, type ExecutionResult } from '../../claude/executor.j
 import { requestPermission } from './card-actions.js';
 import * as registry from '../../channel/active-registry.js';
 import { buildQueueKey } from '../../channel/chat-queue.js';
+import { getRecentHistory, formatHistoryContext } from '../../channel/chat-history.js';
 import { logger } from '../../logger.js';
 
 export async function dispatch(
@@ -168,10 +169,18 @@ async function handleClaudeTask(
   const tools: ToolStatus[] = [];
   const startTime = Date.now();
 
-  // Build prompt with quoted context if replying to a message
+  // Build prompt with context
   let prompt = ctx.text;
   if (ctx.quotedContent) {
     prompt = `[Replying to: "${ctx.quotedContent}"]\n\n${ctx.text}`;
+  }
+  // Inject group chat history for context
+  if (ctx.chatType === 'group') {
+    const history = getRecentHistory(ctx.chatId);
+    const historyContext = formatHistoryContext(history);
+    if (historyContext) {
+      prompt = `${historyContext}\n\n---\n\n${prompt}`;
+    }
   }
 
   await executeClaudeTask(prompt, projectPath, session.claude_session_id, abortController, {
@@ -195,7 +204,12 @@ async function handleClaudeTask(
       if (result.sessionId) db.updateClaudeSessionId(session.id, result.sessionId);
       db.logTask(session.id, ctx.text, result.text, JSON.stringify(tools.map(t => t.tool)), result.durationMs, 'success');
       if (card.isTerminal) { await card.fallbackText(CardBuilder.buildFallbackText(result.text)); }
-      else { await card.complete(CardBuilder.done(projectName, result.text, result.toolCount)); }
+      else {
+        await card.complete(CardBuilder.done(projectName, result.text, result.toolCount, {
+          reasoningText: result.reasoningText || undefined,
+          reasoningElapsedMs: result.reasoningElapsedMs || undefined,
+        }));
+      }
     },
     onError: async (error) => {
       clearTimeout(timeout);
