@@ -1,8 +1,8 @@
 import { FlushController } from './flush-controller.js';
 import {
   sendCard, updateCard, sendText,
-  createCardEntity, sendCardByCardId, streamCardContent,
-  updateCardKitCard, setCardStreamingMode,
+  createCardEntity, sendCardByCardId, replyCardByCardId, replyCardToMessage,
+  streamCardContent, updateCardKitCard, setCardStreamingMode,
   addTypingReaction, removeTypingReaction,
 } from '../messaging/outbound/send.js';
 import { CardBuilder } from './builder.js';
@@ -97,7 +97,10 @@ export class StreamingCard {
     if (cardId) {
       this.cardKitCardId = cardId;
       this.cardKitSequence = 1;
-      const messageId = await sendCardByCardId(this.chatId, cardId, this.threadId ?? undefined);
+      // Reply to user's message if we have the message ID, otherwise send to chat
+      const messageId = this.userMessageId
+        ? await replyCardByCardId(this.userMessageId, cardId)
+        : await sendCardByCardId(this.chatId, cardId, this.threadId ?? undefined);
       if (this.createEpoch !== epoch || this.isTerminal) return;
 
       if (messageId) {
@@ -113,7 +116,9 @@ export class StreamingCard {
     this.cardKitCardId = null;
     this.flush = new FlushController(this.flush['updateFn'], IM_THROTTLE_MS);
     const thinkingCard = CardBuilder.thinking('Working');
-    const messageId = await sendCard(this.chatId, thinkingCard, this.threadId ?? undefined);
+    const messageId = this.userMessageId
+      ? await replyCardToMessage(this.userMessageId, thinkingCard)
+      : await sendCard(this.chatId, thinkingCard, this.threadId ?? undefined);
     if (this.createEpoch !== epoch || this.isTerminal) return;
     if (messageId) {
       this.cardMessageId = messageId;

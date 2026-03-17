@@ -5,7 +5,8 @@ export interface ToolStatus {
 }
 
 interface FeishuCard {
-  header: { title: { tag: string; content: string }; template: string };
+  header?: { title: { tag: string; content: string }; template: string };
+  config?: Record<string, unknown>;
   elements: unknown[];
 }
 
@@ -119,17 +120,29 @@ export const CardBuilder = {
     elements.push({ tag: 'action', actions: [{ tag: 'button', text: { tag: 'plain_text', content: 'Cancel' }, type: 'danger', value: { action: 'cancel_task' } }] });
     return { header: { title: { tag: 'plain_text', content: `🔧 Working · ${project}` }, template: 'orange' }, elements };
   },
-  done(project: string, text: string, toolCount: number, opts?: { reasoningText?: string; reasoningElapsedMs?: number }): FeishuCard {
+  done(project: string, text: string, toolCount: number, opts?: { reasoningText?: string; reasoningElapsedMs?: number; elapsedMs?: number }): FeishuCard {
     const elements: unknown[] = [];
     if (opts?.reasoningText) {
       elements.push(buildReasoningPanel(opts.reasoningText, opts.reasoningElapsedMs));
     }
-    elements.push({ tag: 'div', text: { tag: 'lark_md', content: sanitizeMarkdown(text) } });
-    if (toolCount > 0) { elements.push({ tag: 'hr' }); elements.push({ tag: 'div', text: { tag: 'plain_text', content: `Tool calls: ${toolCount}` } }); }
-    return { header: { title: { tag: 'plain_text', content: `✓ Done · ${project}` }, template: 'green' }, elements };
+    elements.push({ tag: 'markdown', content: sanitizeMarkdown(text) });
+    // Footer with status and elapsed time
+    const footerParts: string[] = ['已完成'];
+    if (toolCount > 0) footerParts.push(`${toolCount} 次工具调用`);
+    if (opts?.elapsedMs) footerParts.push(`耗时 ${formatElapsed(opts.elapsedMs)}`);
+    elements.push({ tag: 'markdown', content: footerParts.join(' · '), text_size: 'notation' });
+    return {
+      config: { wide_screen_mode: true, summary: { content: text.replace(/[*_`#>\[\]()~]/g, '').slice(0, 120) } },
+      elements,
+    };
   },
-  error(project: string, msg: string): FeishuCard {
-    return { header: { title: { tag: 'plain_text', content: `✗ Error · ${project}` }, template: 'red' }, elements: [{ tag: 'div', text: { tag: 'lark_md', content: sanitizeMarkdown(msg) } }] };
+  error(project: string, msg: string, elapsedMs?: number): FeishuCard {
+    const elements: unknown[] = [
+      { tag: 'markdown', content: sanitizeMarkdown(msg) },
+    ];
+    const elapsed = elapsedMs ? ` · 耗时 ${formatElapsed(elapsedMs)}` : '';
+    elements.push({ tag: 'markdown', content: `<font color='red'>出错${elapsed}</font>`, text_size: 'notation' });
+    return { config: { wide_screen_mode: true }, elements };
   },
   confirm(project: string, command: string, taskId: string): FeishuCard {
     return {
@@ -144,7 +157,13 @@ export const CardBuilder = {
     };
   },
   cancelled(project: string): FeishuCard {
-    return { header: { title: { tag: 'plain_text', content: `⊘ Cancelled · ${project}` }, template: 'grey' }, elements: [{ tag: 'div', text: { tag: 'plain_text', content: 'Task was cancelled.' } }] };
+    return {
+      config: { wide_screen_mode: true },
+      elements: [
+        { tag: 'markdown', content: '已停止' },
+        { tag: 'markdown', content: '已停止', text_size: 'notation' },
+      ],
+    };
   },
   buildFallbackText(markdown: string): string {
     return markdown.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1').replace(/#+\s/g, '').trim();
@@ -154,12 +173,8 @@ export const CardBuilder = {
   toCardKit2(card: FeishuCard): object {
     return {
       schema: '2.0',
-      config: {
-        summary: {
-          content: card.header.title.content.slice(0, 120),
-        },
-      },
-      header: card.header,
+      config: card.config ?? {},
+      ...(card.header ? { header: card.header } : {}),
       body: { elements: card.elements },
     };
   },

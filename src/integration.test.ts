@@ -60,9 +60,10 @@ describe('Integration: pipeline flow', () => {
     expect(session.id).toBeTruthy();
 
     const thinking = CardBuilder.thinking('My Workspace');
-    expect(thinking.header.template).toBe('blue');
+    expect(thinking.header?.template).toBe('blue');
     const done = CardBuilder.done('My Workspace', 'Result', 2);
-    expect(done.header.template).toBe('green');
+    expect(done.header).toBeUndefined(); // done cards are headerless
+    expect(JSON.stringify(done)).toContain('已完成');
   });
 
   it('dedup + queue integration', async () => {

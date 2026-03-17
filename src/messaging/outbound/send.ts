@@ -51,6 +51,40 @@ export async function sendCard(chatId: string, card: object, threadId?: string):
   }
 }
 
+/** Reply to a specific message with a card (uses im.message.reply instead of create) */
+export async function replyCardToMessage(replyToMessageId: string, card: object): Promise<string | null> {
+  try {
+    const resp = await (client.im.v1.message as any).reply({
+      path: { message_id: replyToMessageId },
+      data: {
+        content: JSON.stringify(card),
+        msg_type: 'interactive',
+      },
+    });
+    return resp?.data?.message_id ?? null;
+  } catch (err) {
+    logger.error({ err, replyToMessageId }, 'Failed to reply with card');
+    return null;
+  }
+}
+
+/** Reply to a specific message by card_id (CardKit mode) */
+export async function replyCardByCardId(replyToMessageId: string, cardId: string): Promise<string | null> {
+  try {
+    const resp = await (client.im.v1.message as any).reply({
+      path: { message_id: replyToMessageId },
+      data: {
+        content: JSON.stringify({ type: 'card', data: { card_id: cardId } }),
+        msg_type: 'interactive',
+      },
+    });
+    return resp?.data?.message_id ?? null;
+  } catch (err) {
+    logger.error({ err, replyToMessageId, cardId }, 'Failed to reply with card_id');
+    return null;
+  }
+}
+
 export async function updateCard(messageId: string, card: object): Promise<boolean> {
   try {
     await client.im.v1.message.patch({
@@ -70,15 +104,53 @@ export async function updateCard(messageId: string, card: object): Promise<boole
 
 export async function fetchMessageContent(messageId: string): Promise<string | null> {
   try {
-    const resp = await client.im.v1.message.get({
-      path: { message_id: messageId },
+    // Use mget endpoint with raw_card_content to get actual card JSON (not preview)
+    const resp = await (client as any).request({
+      method: 'GET',
+      url: '/open-apis/im/v1/messages/mget',
+      params: {
+        message_ids: messageId,
+        user_id_type: 'open_id',
+        card_msg_content_type: 'raw_card_content',
+      },
     });
-    const msg = resp?.data?.items?.[0] ?? resp?.data;
-    const body = (msg as any)?.body;
-    const content = body?.content ?? (msg as any)?.content;
-    if (!content) return null;
-    const parsed = typeof content === 'string' ? JSON.parse(content) : content;
-    return parsed?.text ?? JSON.stringify(parsed);
+    const items = resp?.data?.items;
+    if (!items || items.length === 0) return null;
+
+    const msg = items[0];
+    const msgType = msg.msg_type ?? 'text';
+    const rawContent = msg.body?.content ?? '{}';
+    const parsed = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;
+
+    // Text message
+    if (msgType === 'text') {
+      return parsed?.text ?? null;
+    }
+    // Interactive card — extract markdown from elements
+    if (msgType === 'interactive') {
+      const elements = parsed?.elements ?? parsed?.body?.elements ?? [];
+      const texts: string[] = [];
+      for (const el of elements) {
+        if (el?.tag === 'div' && el?.text?.content) texts.push(el.text.content);
+        if (el?.tag === 'markdown' && el?.content) texts.push(el.content);
+      }
+      return texts.join('\n').trim() || null;
+    }
+    // Post (rich text)
+    if (msgType === 'post') {
+      const locale = parsed?.zh_cn ?? parsed?.en_us ?? Object.values(parsed)[0];
+      if (locale?.content) {
+        const texts: string[] = [];
+        for (const para of locale.content) {
+          if (Array.isArray(para)) {
+            texts.push(para.map((el: any) => el.text ?? '').join(''));
+          }
+        }
+        return texts.join('\n').trim() || null;
+      }
+    }
+    // Fallback
+    return typeof rawContent === 'string' ? rawContent.slice(0, 500) : JSON.stringify(parsed).slice(0, 500);
   } catch (err) {
     logger.debug({ err, messageId }, 'Failed to fetch message content');
     return null;

@@ -208,6 +208,7 @@ async function handleClaudeTask(
         await card.complete(CardBuilder.done(projectName, result.text, result.toolCount, {
           reasoningText: result.reasoningText || undefined,
           reasoningElapsedMs: result.reasoningElapsedMs || undefined,
+          elapsedMs: result.durationMs,
         }));
       }
     },
@@ -219,7 +220,7 @@ async function handleClaudeTask(
         if (!card.isTerminal) await card.abort(CardBuilder.cancelled(projectName));
       } else {
         if (card.isTerminal) await card.fallbackText(error);
-        else await card.error(CardBuilder.error(projectName, error));
+        else await card.error(CardBuilder.error(projectName, error, Date.now() - startTime));
       }
     },
   });
