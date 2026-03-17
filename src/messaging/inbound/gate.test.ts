@@ -7,7 +7,7 @@ const makeCtx = (o: Partial<MessageContext> = {}): MessageContext => ({
   eventId: 'e1', messageId: 'm1', chatId: 'oc_123', chatType: 'p2p',
   threadId: null, senderId: 'ou_user1', senderName: 'User', text: 'hello',
   rawText: 'hello', messageType: 'text', mentions: [], botMentioned: false,
-  createTime: Date.now(), appId: 'cli_test', ...o,
+  createTime: Date.now(), appId: 'cli_test', parentMessageId: null, quotedContent: null, ...o,
 });
 
 const makeConfig = (o: Partial<Config> = {}): Config => ({

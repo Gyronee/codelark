@@ -20,4 +20,6 @@ export interface MessageContext {
   botMentioned: boolean;
   createTime: number;
   appId: string;
+  parentMessageId: string | null;  // message being replied to
+  quotedContent: string | null;    // text of the replied-to message (resolved async)
 }

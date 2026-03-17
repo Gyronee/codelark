@@ -157,8 +157,8 @@ async function handleClaudeTask(
   }
 
   const session = sessionManager.getOrCreate(ctx.senderId, ctx.threadId, projectName);
-  const card = new StreamingCard(ctx.chatId, ctx.threadId, config.debounceMs);
-  await card.create(CardBuilder.thinking(projectName));
+  const card = new StreamingCard(ctx.chatId, ctx.threadId, ctx.messageId);
+  await card.startTyping(); // Add typing reaction immediately, defer card creation to first token
 
   const abortController = new AbortController();
   const queueKey = buildQueueKey(ctx.chatId, ctx.threadId);
@@ -168,11 +168,16 @@ async function handleClaudeTask(
   const tools: ToolStatus[] = [];
   const startTime = Date.now();
 
-  await executeClaudeTask(ctx.text, projectPath, session.claude_session_id, abortController, {
-    onText: (fullText) => { card.scheduleUpdate(CardBuilder.working(projectName, fullText, tools)); },
+  // Build prompt with quoted context if replying to a message
+  let prompt = ctx.text;
+  if (ctx.quotedContent) {
+    prompt = `[Replying to: "${ctx.quotedContent}"]\n\n${ctx.text}`;
+  }
+
+  await executeClaudeTask(prompt, projectPath, session.claude_session_id, abortController, {
+    onText: (fullText) => { void card.scheduleStreamText(fullText); },
     onToolStart: (tool, detail) => {
       tools.push({ tool, status: 'running', detail });
-      card.scheduleUpdate(CardBuilder.working(projectName, '', tools));
     },
     onToolEnd: (tool, _detail) => {
       const match = tools.find(t => t.tool === tool && t.status === 'running') || tools.find(t => t.status === 'running');

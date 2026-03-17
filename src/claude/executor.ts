@@ -59,6 +59,7 @@ export async function executeClaudeTask(
         },
         systemPrompt: { type: 'preset', preset: 'claude_code' },
         settingSources: ['project'],
+        includePartialMessages: true,
       },
     });
 
@@ -66,14 +67,25 @@ export async function executeClaudeTask(
       if (abortController.signal.aborted) break;
 
       switch (message.type) {
+        // Stream events — incremental token deltas
+        case 'stream_event' as any: {
+          const evt = (message as any).event;
+          if (evt?.type === 'content_block_delta' && evt?.delta?.type === 'text_delta') {
+            fullText += evt.delta.text;
+            callbacks.onText(fullText);
+          }
+          // Capture session_id from stream events
+          if ((message as any).session_id) {
+            sessionId = (message as any).session_id;
+          }
+          break;
+        }
         case 'assistant': {
+          // Complete assistant message — extract tool_use blocks
           const content = message.message?.content;
           if (Array.isArray(content)) {
             for (const block of content) {
-              if (block.type === 'text') {
-                fullText += block.text;
-                callbacks.onText(fullText);
-              } else if (block.type === 'tool_use') {
+              if (block.type === 'tool_use') {
                 toolCount++;
                 const input = block.input as Record<string, unknown> | undefined;
                 const detail =

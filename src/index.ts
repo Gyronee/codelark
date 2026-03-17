@@ -39,6 +39,8 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutting down...');
     registry.abortAll();
+    // Give in-flight card updates a moment to complete
+    await new Promise(r => setTimeout(r, 1000));
     dedup.destroy();
     db.close();
     process.exit(0);

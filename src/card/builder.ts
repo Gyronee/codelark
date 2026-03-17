@@ -61,4 +61,18 @@ export const CardBuilder = {
   buildFallbackText(markdown: string): string {
     return markdown.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1').replace(/#+\s/g, '').trim();
   },
+
+  /** Convert an IM-format card to CardKit 2.0 format for updateCardKitCard */
+  toCardKit2(card: FeishuCard): object {
+    return {
+      schema: '2.0',
+      config: {
+        summary: {
+          content: card.header.title.content.slice(0, 120),
+        },
+      },
+      header: card.header,
+      body: { elements: card.elements },
+    };
+  },
 };
