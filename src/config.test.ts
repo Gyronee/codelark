@@ -37,10 +37,10 @@ describe('loadConfig', () => {
   it('defaults allowedUserIds to empty array when not set', () => {
     process.env.FEISHU_APP_ID = 'id';
     process.env.FEISHU_APP_SECRET = 'secret';
-    process.env.ANTHROPIC_API_KEY = 'key';
     process.env.WORKSPACE_DIR = '/tmp/ws';
 
     const config = loadConfig();
     expect(config.allowedUserIds).toEqual([]);
+    expect(config.anthropicApiKey).toBeUndefined();
   });
 });

@@ -58,6 +58,17 @@ export class ProjectManager {
     return projectPath;
   }
 
+  ensureUserDefault(userId: string): string {
+    const safeName = userId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const userDir = join(this.workspaceDir, 'users', safeName);
+    if (!existsSync(userDir)) {
+      mkdirSync(userDir, { recursive: true });
+      execSync('git init', { cwd: userDir, stdio: 'ignore' });
+      logger.info({ userId, path: userDir }, 'Created default user workspace');
+    }
+    return userDir;
+  }
+
   validateCloneUrl(url: string): void {
     if (!url.startsWith('https://')) {
       throw new Error('Only https:// URLs are allowed for cloning.');

@@ -38,6 +38,10 @@ describe('parseCommand', () => {
     expect(parseCommand('/status')).toEqual({ type: 'status', action: null, args: [] });
   });
 
+  it('parses /whoami', () => {
+    expect(parseCommand('/whoami')).toEqual({ type: 'whoami', action: null, args: [] });
+  });
+
   it('returns null for non-command text', () => {
     expect(parseCommand('help me fix this bug')).toBeNull();
   });

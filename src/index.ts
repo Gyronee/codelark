@@ -4,39 +4,42 @@ import { logger } from './logger.js';
 import { Database } from './session/db.js';
 import { SessionManager } from './session/manager.js';
 import { ProjectManager } from './project/manager.js';
-import { FeishuClient } from './feishu/client.js';
-import { MessageHandler } from './feishu/handler.js';
+import { initFeishuClient, startWebSocket } from './messaging/outbound/send.js';
+import { createPipeline } from './messaging/inbound/event-handlers.js';
+import * as registry from './channel/active-registry.js';
 import { join } from 'path';
 
 async function main(): Promise<void> {
   const config = loadConfig();
   logger.info({ workspaceDir: config.workspaceDir }, 'Starting remote-control');
 
-  // Initialize database
   const dbPath = join(config.workspaceDir, 'remote-control.db');
   const db = new Database(dbPath);
-
-  // Initialize managers
   const sessionManager = new SessionManager(db);
   const projectManager = new ProjectManager(config.workspaceDir);
-
-  // Cleanup old tmp projects on startup
   projectManager.cleanupTmp();
 
-  // Initialize Feishu client
-  const feishu = new FeishuClient(config);
-  const handler = new MessageHandler(config, feishu, sessionManager, projectManager, db);
+  initFeishuClient(config);
 
-  // Start WebSocket connection
-  const dispatcher = handler.createEventDispatcher();
-  feishu.start(dispatcher);
+  if (!config.botOpenId) {
+    logger.warn('BOT_OPEN_ID not set — group @mention detection will not work. Use /whoami in a group to find the bot open_id, then set BOT_OPEN_ID in .env');
+  }
 
+  const { dispatcher, dedup } = createPipeline({
+    config,
+    db,
+    sessionManager,
+    projectManager,
+    botOpenId: config.botOpenId,
+  });
+
+  startWebSocket(dispatcher);
   logger.info('remote-control is ready');
 
-  // Graceful shutdown
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutting down...');
-    sessionManager.cancelAll();
+    registry.abortAll();
+    dedup.destroy();
     db.close();
     process.exit(0);
   };
