@@ -1,0 +1,158 @@
+import BetterSqlite3 from 'better-sqlite3';
+import { randomUUID } from 'crypto';
+
+export interface UserRow {
+  feishu_user_id: string;
+  name: string | null;
+  active_project: string | null;
+  created_at: string;
+}
+
+export interface SessionRow {
+  id: string;
+  feishu_user_id: string;
+  topic_id: string | null;
+  project_name: string;
+  claude_session_id: string | null;
+  last_active_at: string | null;
+  created_at: string;
+}
+
+export interface TaskLogRow {
+  id: number;
+  session_id: string;
+  user_message: string | null;
+  assistant_message: string | null;
+  tools_used: string | null;
+  duration_ms: number | null;
+  status: string | null;
+  created_at: string;
+}
+
+export class Database {
+  private db: BetterSqlite3.Database;
+
+  constructor(dbPath: string) {
+    this.db = new BetterSqlite3(dbPath);
+    this.db.pragma('journal_mode = WAL');
+    this.migrate();
+  }
+
+  private migrate(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        feishu_user_id TEXT PRIMARY KEY,
+        name TEXT,
+        active_project TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        feishu_user_id TEXT NOT NULL,
+        topic_id TEXT,
+        project_name TEXT NOT NULL,
+        claude_session_id TEXT,
+        last_active_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS task_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        user_message TEXT,
+        assistant_message TEXT,
+        tools_used TEXT,
+        duration_ms INTEGER,
+        status TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+  }
+
+  upsertUser(feishuUserId: string, name: string | null): void {
+    this.db.prepare(`
+      INSERT INTO users (feishu_user_id, name)
+      VALUES (?, ?)
+      ON CONFLICT(feishu_user_id) DO UPDATE SET name = excluded.name
+    `).run(feishuUserId, name);
+  }
+
+  getUser(feishuUserId: string): UserRow | null {
+    return this.db.prepare('SELECT * FROM users WHERE feishu_user_id = ?')
+      .get(feishuUserId) as UserRow | null;
+  }
+
+  setActiveProject(feishuUserId: string, projectName: string): void {
+    this.db.prepare('UPDATE users SET active_project = ? WHERE feishu_user_id = ?')
+      .run(projectName, feishuUserId);
+  }
+
+  createSession(feishuUserId: string, topicId: string | null, projectName: string): string {
+    const id = randomUUID();
+    this.db.prepare(`
+      INSERT INTO sessions (id, feishu_user_id, topic_id, project_name, last_active_at)
+      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).run(id, feishuUserId, topicId, projectName);
+    return id;
+  }
+
+  findSession(feishuUserId: string, topicId: string | null, projectName: string): SessionRow | null {
+    let row: unknown;
+    if (topicId) {
+      row = this.db.prepare(`
+        SELECT * FROM sessions
+        WHERE feishu_user_id = ? AND topic_id = ? AND project_name = ?
+        ORDER BY last_active_at DESC LIMIT 1
+      `).get(feishuUserId, topicId, projectName);
+    } else {
+      row = this.db.prepare(`
+        SELECT * FROM sessions
+        WHERE feishu_user_id = ? AND topic_id IS NULL AND project_name = ?
+        ORDER BY last_active_at DESC LIMIT 1
+      `).get(feishuUserId, projectName);
+    }
+    return (row ?? null) as SessionRow | null;
+  }
+
+  updateClaudeSessionId(sessionId: string, claudeSessionId: string): void {
+    this.db.prepare(`
+      UPDATE sessions SET claude_session_id = ?, last_active_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(claudeSessionId, sessionId);
+  }
+
+  touchSession(sessionId: string): void {
+    this.db.prepare('UPDATE sessions SET last_active_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(sessionId);
+  }
+
+  resetSession(sessionId: string): void {
+    this.db.prepare('UPDATE sessions SET claude_session_id = NULL WHERE id = ?')
+      .run(sessionId);
+  }
+
+  logTask(
+    sessionId: string,
+    userMessage: string | null,
+    assistantMessage: string | null,
+    toolsUsed: string | null,
+    durationMs: number | null,
+    status: string
+  ): void {
+    this.db.prepare(`
+      INSERT INTO task_logs (session_id, user_message, assistant_message, tools_used, duration_ms, status)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(sessionId, userMessage, assistantMessage, toolsUsed, durationMs, status);
+  }
+
+  getTaskLogs(sessionId: string, limit: number): TaskLogRow[] {
+    return this.db.prepare(
+      'SELECT * FROM task_logs WHERE session_id = ? ORDER BY created_at DESC LIMIT ?'
+    ).all(sessionId, limit) as TaskLogRow[];
+  }
+
+  close(): void {
+    this.db.close();
+  }
+}
