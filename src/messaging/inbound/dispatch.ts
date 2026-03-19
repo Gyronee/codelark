@@ -13,6 +13,7 @@ import * as registry from '../../channel/active-registry.js';
 import { buildQueueKey } from '../../channel/chat-queue.js';
 import { getRecentHistory, formatHistoryContext } from '../../channel/chat-history.js';
 import { getUserModel, setUserModel, listModels } from '../../channel/user-model.js';
+import { downloadImage, downloadFile } from './media.js';
 import { logger } from '../../logger.js';
 
 export async function dispatch(
@@ -30,8 +31,8 @@ export async function dispatch(
     return;
   }
 
-  if (ctx.messageType !== 'text') {
-    await sendText(ctx.chatId, '目前仅支持文本消息。', ctx.threadId ?? undefined);
+  if (!['text', 'image', 'file', 'post'].includes(ctx.messageType)) {
+    await sendText(ctx.chatId, '暂不支持该消息类型，请发送文字、图片或文件。', ctx.threadId ?? undefined);
     return;
   }
 
@@ -174,6 +175,26 @@ async function handleClaudeTask(
     projectPath = projectManager.ensureUserDefault(ctx.senderId);
   }
 
+  // Download attached resources (images / files)
+  const imagePaths: string[] = [];
+  const fileHints: string[] = [];
+
+  for (const res of ctx.resources) {
+    try {
+      if (res.type === 'image') {
+        const { filePath } = await downloadImage(ctx.messageId, res.fileKey);
+        imagePaths.push(filePath);
+      } else if (res.type === 'file') {
+        const { localPath, fileName } = await downloadFile(
+          ctx.messageId, res.fileKey, res.fileName || 'file', projectPath,
+        );
+        fileHints.push(`用户上传了文件 "${fileName}"，已保存到 ${localPath}，请查看并分析。`);
+      }
+    } catch (err) {
+      logger.warn({ err, resource: res }, 'Failed to download resource');
+    }
+  }
+
   const session = sessionManager.getOrCreate(ctx.senderId, ctx.threadId, projectName);
   const card = new StreamingCard(ctx.chatId, ctx.threadId, ctx.messageId);
   await card.startTyping(); // Add typing reaction immediately, defer card creation to first token
@@ -188,8 +209,19 @@ async function handleClaudeTask(
 
   // Build prompt with context
   let prompt = ctx.text;
+
+  // Append image paths for SDK auto-detection (detectAndLoadPromptImages)
+  if (imagePaths.length > 0) {
+    prompt += '\n\n' + imagePaths.join('\n');
+  }
+
+  // Append file location hints
+  if (fileHints.length > 0) {
+    prompt += '\n\n' + fileHints.join('\n');
+  }
+
   if (ctx.quotedContent) {
-    prompt = `[Replying to: "${ctx.quotedContent}"]\n\n${ctx.text}`;
+    prompt = `[Replying to: "${ctx.quotedContent}"]\n\n${prompt}`;
   }
   // Inject group chat history for context
   if (ctx.chatType === 'group') {
