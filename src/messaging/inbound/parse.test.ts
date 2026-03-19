@@ -43,4 +43,55 @@ describe('parseMessageEvent', () => {
     const ctx = parseMessageEvent(makeEvent({ message: { root_id: 'thread_42' } }), 'ou_bot');
     expect(ctx.threadId).toBe('thread_42');
   });
+
+  it('text message has empty resources array', () => {
+    const ctx = parseMessageEvent(makeEvent(), 'ou_bot');
+    expect(ctx.resources).toEqual([]);
+  });
+
+  it('image message extracts image_key as resource', () => {
+    const ctx = parseMessageEvent(makeEvent({
+      message: {
+        message_type: 'image',
+        content: JSON.stringify({ image_key: 'img_v3_xxx' }),
+      },
+    }), 'ou_bot');
+    expect(ctx.resources).toEqual([{ type: 'image', fileKey: 'img_v3_xxx' }]);
+    expect(ctx.text).toBe('[用户发送了一张图片]');
+  });
+
+  it('file message extracts file_key and file_name as resource', () => {
+    const ctx = parseMessageEvent(makeEvent({
+      message: {
+        message_type: 'file',
+        content: JSON.stringify({ file_key: 'file_xxx', file_name: 'code.py' }),
+      },
+    }), 'ou_bot');
+    expect(ctx.resources).toEqual([{ type: 'file', fileKey: 'file_xxx', fileName: 'code.py' }]);
+    expect(ctx.text).toBe('[用户发送了文件: code.py]');
+  });
+
+  it('post message extracts embedded images from content', () => {
+    const ctx = parseMessageEvent(makeEvent({
+      message: {
+        message_type: 'post',
+        content: JSON.stringify({
+          title: 'Test Post',
+          content: [
+            [
+              { tag: 'text', text: 'hello ' },
+              { tag: 'img', image_key: 'img_v3_aaa' },
+            ],
+            [
+              { tag: 'img', image_key: 'img_v3_bbb' },
+            ],
+          ],
+        }),
+      },
+    }), 'ou_bot');
+    expect(ctx.resources).toEqual([
+      { type: 'image', fileKey: 'img_v3_aaa' },
+      { type: 'image', fileKey: 'img_v3_bbb' },
+    ]);
+  });
 });
