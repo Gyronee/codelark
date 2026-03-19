@@ -83,7 +83,7 @@ export class Database {
       .get(feishuUserId) as UserRow | null;
   }
 
-  setActiveProject(feishuUserId: string, projectName: string): void {
+  setActiveProject(feishuUserId: string, projectName: string | null): void {
     this.db.prepare('UPDATE users SET active_project = ? WHERE feishu_user_id = ?')
       .run(projectName, feishuUserId);
   }

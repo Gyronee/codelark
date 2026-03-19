@@ -68,6 +68,7 @@ async function handleCommand(
         '/project use <名称> — 切换到指定项目',
         '/project create <名称> — 创建新空项目',
         '/project clone <地址> — 克隆 Git 仓库（仅支持 https）',
+        '/project home — 切换到个人目录',
         '/file <path> — 从项目目录获取文件', '',
         '直接发送文字即可与 Claude Code 对话。',
         '无需设置项目，系统会自动为你创建独立的工作目录。',
@@ -120,12 +121,12 @@ async function handleCommand(
         return;
       }
       const user = db.getUser(ctx.senderId);
-      const projectName = user?.active_project;
-      if (!projectName) {
-        await sendText(ctx.chatId, '请先使用 /project use <name> 选择项目', threadId);
-        return;
+      let projectDir: string;
+      if (user?.active_project) {
+        projectDir = projectManager.resolve(user.active_project);
+      } else {
+        projectDir = projectManager.ensureUserDefault(ctx.senderId);
       }
-      const projectDir = projectManager.resolve(projectName);
       const fullPath = resolve(projectDir, filePath);
 
       // Security: path traversal prevention
@@ -187,6 +188,12 @@ async function handleProjectCommand(
         db.setActiveProject(ctx.senderId, name);
         await reply(`已克隆并切换到: ${name}`);
       } catch (e: any) { await reply(e.message); }
+      break;
+    }
+    case 'home': {
+      db.setActiveProject(ctx.senderId, null);
+      projectManager.ensureUserDefault(ctx.senderId);
+      await reply('已切换到个人目录');
       break;
     }
     default: await reply(`未知项目命令: ${cmd.action}`);

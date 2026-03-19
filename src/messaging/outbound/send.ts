@@ -58,7 +58,7 @@ export async function uploadFile(filePath: string, fileName: string): Promise<st
   const response = await client.im.v1.file.create({
     data: { file_type: fileType as any, file_name: fileName, file: fileStream },
   });
-  return response?.data?.file_key ?? (response as any)?.file_key;
+  return (response as any)?.data?.file_key ?? (response as any)?.file_key;
 }
 
 export async function sendFile(chatId: string, fileKey: string, threadId?: string): Promise<void> {
