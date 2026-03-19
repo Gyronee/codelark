@@ -2,6 +2,7 @@ export interface ResourceDescriptor {
   type: 'image' | 'file';
   fileKey: string;
   fileName?: string;
+  sourceMessageId?: string;  // which message this resource belongs to (for quoted messages)
 }
 
 export interface MentionInfo {
@@ -29,4 +30,5 @@ export interface MessageContext {
   appId: string;
   parentMessageId: string | null;  // message being replied to
   quotedContent: string | null;    // text of the replied-to message (resolved async)
+  quotedMessageId: string | null;  // message ID of quoted message (for downloading its resources)
 }

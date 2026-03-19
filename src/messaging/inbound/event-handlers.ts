@@ -9,8 +9,9 @@ import { checkGate } from './gate.js';
 import { dispatch } from './dispatch.js';
 import { ChatQueue, buildQueueKey } from '../../channel/chat-queue.js';
 import * as registry from '../../channel/active-registry.js';
-import { fetchMessageContent } from '../outbound/send.js';
+import { fetchMessageContent, updateCard } from '../outbound/send.js';
 import { recordMessage } from '../../channel/chat-history.js';
+import { resolvePermission } from './card-actions.js';
 import { logger } from '../../logger.js';
 
 export interface PipelineDeps {
@@ -31,6 +32,60 @@ export function createPipeline(deps: PipelineDeps): {
 
   const dispatcher = new Lark.EventDispatcher({});
   dispatcher.register({
+    // Card button callbacks — via WebSocket long connection
+    // SDK types don't expose this, but Feishu WebSocket supports it (same as official plugin)
+    'card.action.trigger': ((data: any) => {
+      try {
+        const action = data?.action?.value?.action;
+        const userId = data?.operator?.open_id;
+        const messageId = data?.open_message_id;
+        logger.info({ action, userId, messageId }, 'Card action received');
+
+        // Update the card to a minimal result after action
+        const replaceCard = (text: string) => {
+          if (messageId) {
+            void updateCard(messageId, {
+              config: { wide_screen_mode: true },
+              elements: [{ tag: 'markdown', content: text, text_size: 'notation' }],
+            });
+          }
+        };
+
+        if (action === 'cancel_task') {
+          if (userId) {
+            const active = registry.getByUserId(userId);
+            if (active) {
+              const [key, d] = active;
+              d.abortController.abort();
+              d.abortCard();
+              registry.removeActive(key);
+              logger.info({ key, userId }, 'Task cancelled via card button');
+            }
+          }
+          replaceCard('⊘ 已取消任务');
+        } else if (action === 'confirm_danger') {
+          const taskId = data?.action?.value?.taskId;
+          if (taskId) resolvePermission(taskId, true);
+          replaceCard('✓ 已允许执行');
+        } else if (action === 'reject_danger') {
+          const taskId = data?.action?.value?.taskId;
+          if (taskId) resolvePermission(taskId, false);
+          replaceCard('✗ 已拒绝执行');
+        } else if (action === 'reset_session') {
+          if (userId) {
+            const user = deps.db.getUser(userId);
+            if (user?.active_project) {
+              deps.sessionManager.reset(userId, null, user.active_project);
+              logger.info({ userId }, 'Session reset via card button');
+            }
+          }
+          replaceCard('✓ 会话已重置');
+        }
+      } catch (err) {
+        logger.warn({ err }, 'card.action.trigger handler error');
+      }
+    }) as any,
+
     'im.message.receive_v1': async (data: any) => {
       try {
         // Stage 1: App ID validation
@@ -82,9 +137,20 @@ export function createPipeline(deps: PipelineDeps): {
           recordMessage(ctx.chatId, ctx.senderName || ctx.senderId, ctx.text);
         }
 
-        // Stage 3c: Resolve quoted message content (if replying to a message)
+        // Stage 3c: Resolve quoted message content and resources (if replying to a message)
         if (ctx.parentMessageId) {
-          ctx.quotedContent = await fetchMessageContent(ctx.parentMessageId);
+          const quoted = await fetchMessageContent(ctx.parentMessageId);
+          if (quoted) {
+            ctx.quotedContent = quoted.text;
+            // Merge quoted message's resources (images/files) into current context
+            // so replying to an image message lets Claude see that image
+            if (quoted.resources.length > 0) {
+              ctx.quotedMessageId = quoted.messageId;
+              for (const res of quoted.resources) {
+                ctx.resources.push({ ...res, sourceMessageId: quoted.messageId });
+              }
+            }
+          }
         }
 
         // Stage 4: Gate

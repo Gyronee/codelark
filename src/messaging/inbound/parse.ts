@@ -49,6 +49,6 @@ export function parseMessageEvent(data: any, botOpenId: string): MessageContext 
     senderName: sender?.sender_id?.name ?? null, text, rawText,
     messageType, resources, mentions, botMentioned,
     createTime: Number(message?.create_time ?? 0), appId: app_id ?? '',
-    parentMessageId: message?.parent_id || null, quotedContent: null,
+    parentMessageId: message?.parent_id || null, quotedContent: null, quotedMessageId: null,
   };
 }

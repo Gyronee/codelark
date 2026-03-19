@@ -226,12 +226,13 @@ async function handleClaudeTask(
 
   for (const res of ctx.resources) {
     try {
+      const msgId = res.sourceMessageId || ctx.messageId;
       if (res.type === 'image') {
-        const { filePath } = await downloadImage(ctx.messageId, res.fileKey);
+        const { filePath } = await downloadImage(msgId, res.fileKey);
         imagePaths.push(filePath);
       } else if (res.type === 'file') {
         const { localPath, fileName } = await downloadFile(
-          ctx.messageId, res.fileKey, res.fileName || 'file', projectPath,
+          msgId, res.fileKey, res.fileName || 'file', projectPath,
         );
         fileHints.push(`用户上传了文件 "${fileName}"，已保存到 ${localPath}，请查看并分析。`);
       }

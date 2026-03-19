@@ -142,9 +142,14 @@ export async function updateCard(messageId: string, card: object): Promise<boole
 // Fetch message content (for reply-to context)
 // ---------------------------------------------------------------------------
 
-export async function fetchMessageContent(messageId: string): Promise<string | null> {
+export interface FetchedMessage {
+  text: string | null;
+  resources: Array<{ type: 'image' | 'file'; fileKey: string; fileName?: string }>;
+  messageId: string;
+}
+
+export async function fetchMessageContent(messageId: string): Promise<FetchedMessage | null> {
   try {
-    // Use mget endpoint with raw_card_content to get actual card JSON (not preview)
     const resp = await (client as any).request({
       method: 'GET',
       url: '/open-apis/im/v1/messages/mget',
@@ -161,10 +166,21 @@ export async function fetchMessageContent(messageId: string): Promise<string | n
     const msgType = msg.msg_type ?? 'text';
     const rawContent = msg.body?.content ?? '{}';
     const parsed = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;
+    const resources: FetchedMessage['resources'] = [];
 
+    // Image message
+    if (msgType === 'image') {
+      if (parsed?.image_key) resources.push({ type: 'image', fileKey: parsed.image_key });
+      return { text: null, resources, messageId };
+    }
+    // File message
+    if (msgType === 'file') {
+      if (parsed?.file_key) resources.push({ type: 'file', fileKey: parsed.file_key, fileName: parsed.file_name });
+      return { text: null, resources, messageId };
+    }
     // Text message
     if (msgType === 'text') {
-      return parsed?.text ?? null;
+      return { text: parsed?.text ?? null, resources, messageId };
     }
     // Interactive card — extract markdown from elements
     if (msgType === 'interactive') {
@@ -174,23 +190,27 @@ export async function fetchMessageContent(messageId: string): Promise<string | n
         if (el?.tag === 'div' && el?.text?.content) texts.push(el.text.content);
         if (el?.tag === 'markdown' && el?.content) texts.push(el.content);
       }
-      return texts.join('\n').trim() || null;
+      return { text: texts.join('\n').trim() || null, resources, messageId };
     }
-    // Post (rich text)
+    // Post (rich text) — also extract embedded images
     if (msgType === 'post') {
       const locale = parsed?.zh_cn ?? parsed?.en_us ?? Object.values(parsed)[0];
       if (locale?.content) {
         const texts: string[] = [];
         for (const para of locale.content) {
           if (Array.isArray(para)) {
-            texts.push(para.map((el: any) => el.text ?? '').join(''));
+            for (const el of para) {
+              if (el.tag === 'text') texts.push(el.text ?? '');
+              if (el.tag === 'img' && el.image_key) resources.push({ type: 'image', fileKey: el.image_key });
+            }
           }
         }
-        return texts.join('\n').trim() || null;
+        return { text: texts.join('').trim() || null, resources, messageId };
       }
     }
     // Fallback
-    return typeof rawContent === 'string' ? rawContent.slice(0, 500) : JSON.stringify(parsed).slice(0, 500);
+    const fallback = typeof rawContent === 'string' ? rawContent.slice(0, 500) : JSON.stringify(parsed).slice(0, 500);
+    return { text: fallback, resources, messageId };
   } catch (err) {
     logger.debug({ err, messageId }, 'Failed to fetch message content');
     return null;
