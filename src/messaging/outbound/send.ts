@@ -5,6 +5,11 @@ import { logger } from '../../logger.js';
 let client: Lark.Client;
 let wsClient: Lark.WSClient;
 
+export function getClient(): Lark.Client {
+  if (!client) throw new Error('Feishu client not initialized — call initFeishuClient first');
+  return client;
+}
+
 export function initFeishuClient(config: Config): { client: Lark.Client; wsClient: Lark.WSClient } {
   const baseConfig = { appId: config.feishu.appId, appSecret: config.feishu.appSecret };
   client = new Lark.Client(baseConfig);
