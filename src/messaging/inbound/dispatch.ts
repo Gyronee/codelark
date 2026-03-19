@@ -5,7 +5,7 @@ import type { SessionManager } from '../../session/manager.js';
 import type { ProjectManager } from '../../project/manager.js';
 import { parseCommand } from '../../utils/command.js';
 import { resolve, basename } from 'path';
-import { existsSync, statSync } from 'fs';
+import { existsSync, statSync, unlinkSync } from 'fs';
 import { sendText, sendCard, uploadFile, sendFile } from '../outbound/send.js';
 import { StreamingCard } from '../../card/streaming-card.js';
 import { CardBuilder, type ToolStatus } from '../../card/builder.js';
@@ -67,7 +67,8 @@ async function handleCommand(
         '/project list — 列出所有项目',
         '/project use <名称> — 切换到指定项目',
         '/project create <名称> — 创建新空项目',
-        '/project clone <地址> — 克隆 Git 仓库（仅支持 https）', '',
+        '/project clone <地址> — 克隆 Git 仓库（仅支持 https）',
+        '/file <path> — 从项目目录获取文件', '',
         '直接发送文字即可与 Claude Code 对话。',
         '无需设置项目，系统会自动为你创建独立的工作目录。',
       ];
@@ -312,4 +313,9 @@ async function handleClaudeTask(
       }
     },
   }, userModel);
+
+  // Cleanup temp images
+  for (const imgPath of imagePaths) {
+    try { unlinkSync(imgPath); } catch { /* ignore */ }
+  }
 }
