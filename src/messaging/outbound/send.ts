@@ -1,4 +1,6 @@
 import * as Lark from '@larksuiteoapi/node-sdk';
+import { createReadStream } from 'fs';
+import { extname } from 'path';
 import type { Config } from '../../config.js';
 import { logger } from '../../logger.js';
 
@@ -36,6 +38,39 @@ export async function sendText(chatId: string, text: string, threadId?: string):
   } catch (err) {
     logger.error({ err, chatId }, 'Failed to send text');
   }
+}
+
+// ---------------------------------------------------------------------------
+// File upload & send
+// ---------------------------------------------------------------------------
+
+const EXTENSION_TYPE_MAP: Record<string, string> = {
+  '.pdf': 'pdf',
+  '.doc': 'doc', '.docx': 'doc',
+  '.xls': 'xls', '.xlsx': 'xls', '.csv': 'xls',
+  '.ppt': 'ppt', '.pptx': 'ppt',
+};
+
+export async function uploadFile(filePath: string, fileName: string): Promise<string> {
+  const fileStream = createReadStream(filePath);
+  const ext = extname(fileName).toLowerCase();
+  const fileType = EXTENSION_TYPE_MAP[ext] ?? 'stream';
+  const response = await client.im.v1.file.create({
+    data: { file_type: fileType as any, file_name: fileName, file: fileStream },
+  });
+  return response?.data?.file_key ?? (response as any)?.file_key;
+}
+
+export async function sendFile(chatId: string, fileKey: string, threadId?: string): Promise<void> {
+  await client.im.v1.message.create({
+    params: { receive_id_type: 'chat_id' },
+    data: {
+      receive_id: chatId,
+      msg_type: 'file' as any,
+      content: JSON.stringify({ file_key: fileKey }),
+      ...(threadId ? { root_id: threadId } : {}),
+    } as any,
+  });
 }
 
 export async function sendCard(chatId: string, card: object, threadId?: string): Promise<string | null> {

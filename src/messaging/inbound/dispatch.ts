@@ -4,7 +4,9 @@ import type { Database } from '../../session/db.js';
 import type { SessionManager } from '../../session/manager.js';
 import type { ProjectManager } from '../../project/manager.js';
 import { parseCommand } from '../../utils/command.js';
-import { sendText, sendCard } from '../outbound/send.js';
+import { resolve, basename } from 'path';
+import { existsSync, statSync } from 'fs';
+import { sendText, sendCard, uploadFile, sendFile } from '../outbound/send.js';
 import { StreamingCard } from '../../card/streaming-card.js';
 import { CardBuilder, type ToolStatus } from '../../card/builder.js';
 import { executeClaudeTask, type ExecutionResult } from '../../claude/executor.js';
@@ -108,6 +110,41 @@ async function handleCommand(
         }
       }
       break;
+    }
+    case 'file': {
+      const threadId = ctx.threadId ?? undefined;
+      const filePath = cmd.args.join(' ');
+      if (!filePath) {
+        await sendText(ctx.chatId, '用法: /file <文件路径>', threadId);
+        return;
+      }
+      const user = db.getUser(ctx.senderId);
+      const projectName = user?.active_project;
+      if (!projectName) {
+        await sendText(ctx.chatId, '请先使用 /project use <name> 选择项目', threadId);
+        return;
+      }
+      const projectDir = projectManager.resolve(projectName);
+      const fullPath = resolve(projectDir, filePath);
+
+      // Security: path traversal prevention
+      if (!fullPath.startsWith(projectDir)) {
+        await sendText(ctx.chatId, '路径不合法：不能访问项目目录以外的文件', threadId);
+        return;
+      }
+      if (!existsSync(fullPath)) {
+        await sendText(ctx.chatId, `文件不存在: ${filePath}`, threadId);
+        return;
+      }
+      const stats = statSync(fullPath);
+      if (stats.size > 1024 * 1024) {
+        await sendText(ctx.chatId, `文件过大 (${(stats.size / 1024 / 1024).toFixed(1)}MB)，上限 1MB。后续将支持通过飞书文档查看。`, threadId);
+        return;
+      }
+      const fileName = basename(fullPath);
+      const fileKey = await uploadFile(fullPath, fileName);
+      await sendFile(ctx.chatId, fileKey, threadId);
+      return;
     }
   }
 }

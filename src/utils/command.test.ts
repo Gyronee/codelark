@@ -49,4 +49,16 @@ describe('parseCommand', () => {
   it('returns null for empty string', () => {
     expect(parseCommand('')).toBeNull();
   });
+
+  it('parses /file with a simple path', () => {
+    expect(parseCommand('/file src/index.ts')).toEqual({
+      type: 'file', action: null, args: ['src/index.ts']
+    });
+  });
+
+  it('parses /file with spaces in path', () => {
+    expect(parseCommand('/file path with spaces/file.txt')).toEqual({
+      type: 'file', action: null, args: ['path', 'with', 'spaces/file.txt']
+    });
+  });
 });
