@@ -4,6 +4,8 @@ import { readdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { logger } from '../logger.js';
 import { type ToolStatus, extractThinkingContent, stripThinkingTags } from '../card/builder.js';
+import { createFeishuDocServer } from '../tools/feishu-doc-server.js';
+import type { Database } from '../session/db.js';
 
 function getLocalPlugins(): Array<{ type: 'local'; path: string }> {
   // Plugins are cached at ~/.claude/plugins/cache/<marketplace>/<plugin-name>/<version>/
@@ -61,6 +63,8 @@ export async function executeClaudeTask(
   abortController: AbortController,
   callbacks: ExecutionCallbacks,
   model?: string,
+  userId?: string,
+  db?: Database,
 ): Promise<void> {
   const startTime = Date.now();
   let fullText = '';
@@ -69,6 +73,16 @@ export async function executeClaudeTask(
   let reasoningStartTime: number | null = null;
   let reasoningElapsedMs = 0;
   let wasInReasoning = false;
+
+  // Build MCP servers for this user
+  const mcpServers: Record<string, any> = {};
+  if (userId && db) {
+    const appId = process.env.FEISHU_APP_ID ?? '';
+    const appSecret = process.env.FEISHU_APP_SECRET ?? '';
+    if (appId && appSecret) {
+      mcpServers['feishu-docs'] = createFeishuDocServer(userId, db, appId, appSecret);
+    }
+  }
 
   try {
     const conversation = query({
@@ -99,6 +113,7 @@ export async function executeClaudeTask(
         plugins: getLocalPlugins(),
         includePartialMessages: true,
         stderr: (data: string) => { logger.debug({ stderr: data.slice(0, 200) }, 'Claude stderr'); },
+        ...(Object.keys(mcpServers).length > 0 ? { mcpServers } : {}),
       },
     });
 

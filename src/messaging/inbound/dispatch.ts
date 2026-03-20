@@ -320,7 +320,7 @@ async function handleClaudeTask(
         else await card.error(CardBuilder.error(projectName, error, Date.now() - startTime));
       }
     },
-  }, userModel);
+  }, userModel, ctx.senderId, db);
 
   // Cleanup temp images
   for (const imgPath of imagePaths) {
