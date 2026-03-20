@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, statSync, rmSync } from 'fs';
 import { join } from 'path';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import { randomBytes } from 'crypto';
 import { readConfig, writeConfig } from './config.js';
 import { logger } from '../logger.js';
@@ -82,7 +82,7 @@ export class ProjectManager {
     const dirName = `${shortId}-${repoName}`;
     const clonePath = join(this.workspaceDir, 'tmp', dirName);
 
-    execSync(`git clone --depth 1 ${url} ${clonePath}`, { stdio: 'ignore', timeout: 120_000 });
+    execFileSync('git', ['clone', '--depth', '1', url, clonePath], { stdio: 'ignore', timeout: 120_000 });
 
     const config = readConfig(this.workspaceDir);
     config.projects[dirName] = {

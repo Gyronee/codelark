@@ -144,15 +144,15 @@ export const CardBuilder = {
     elements.push({ tag: 'markdown', content: `<font color='red'>出错${elapsed}</font>`, text_size: 'notation' });
     return { config: { wide_screen_mode: true }, elements };
   },
-  confirm(project: string, command: string, taskId: string): FeishuCard {
+  confirm(project: string, command: string, taskId: string, expectedUserId?: string): FeishuCard {
     return {
       config: { wide_screen_mode: true, update_multi: true },
       header: { title: { tag: 'plain_text', content: `⚠️ Confirm · ${project}` }, template: 'yellow' },
       elements: [
         { tag: 'div', text: { tag: 'lark_md', content: `Claude wants to execute:\n\`\`\`\n${command}\n\`\`\`` } },
         { tag: 'action', actions: [
-          { tag: 'button', text: { tag: 'plain_text', content: 'Allow' }, type: 'primary', value: { action: 'confirm_danger', taskId } },
-          { tag: 'button', text: { tag: 'plain_text', content: 'Deny' }, type: 'danger', value: { action: 'reject_danger', taskId } },
+          { tag: 'button', text: { tag: 'plain_text', content: 'Allow' }, type: 'primary', value: { action: 'confirm_danger', taskId, expectedUserId } },
+          { tag: 'button', text: { tag: 'plain_text', content: 'Deny' }, type: 'danger', value: { action: 'reject_danger', taskId, expectedUserId } },
         ]},
       ],
     };

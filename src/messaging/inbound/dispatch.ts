@@ -5,7 +5,7 @@ import type { SessionManager } from '../../session/manager.js';
 import type { ProjectManager } from '../../project/manager.js';
 import { parseCommand } from '../../utils/command.js';
 import { resolve, basename } from 'path';
-import { existsSync, statSync, unlinkSync } from 'fs';
+import { existsSync, realpathSync, statSync, unlinkSync } from 'fs';
 import { sendText, sendCard, updateCard, uploadFile, sendFile } from '../outbound/send.js';
 import { StreamingCard } from '../../card/streaming-card.js';
 import { CardBuilder, type ToolStatus } from '../../card/builder.js';
@@ -130,13 +130,15 @@ async function handleCommand(
       }
       const fullPath = resolve(projectDir, filePath);
 
-      // Security: path traversal prevention
-      if (!fullPath.startsWith(projectDir)) {
-        await sendText(ctx.chatId, '路径不合法：不能访问项目目录以外的文件', threadId);
-        return;
-      }
+      // Security: path traversal prevention (resolve symlinks to catch ../.. tricks)
+      const realProjectDir = realpathSync(projectDir);
       if (!existsSync(fullPath)) {
         await sendText(ctx.chatId, `文件不存在: ${filePath}`, threadId);
+        return;
+      }
+      const realFullPath = realpathSync(fullPath);
+      if (!realFullPath.startsWith(realProjectDir)) {
+        await sendText(ctx.chatId, '路径不合法：不能访问项目目录以外的文件', threadId);
         return;
       }
       const stats = statSync(fullPath);
@@ -180,7 +182,9 @@ async function handleCommand(
                 return;
               }
             } catch (err) {
-              logger.warn({ err }, 'Identity verification failed, proceeding anyway');
+              logger.warn({ err }, 'Identity verification failed');
+              if (messageId) await updateCard(messageId, { config: { update_multi: true }, elements: [{ tag: 'markdown', content: '✗ 身份验证失败，请重试' }] });
+              return;
             }
 
             const now = Date.now();
@@ -352,10 +356,11 @@ async function handleClaudeTask(
       // Queue: serialize permission requests, show one at a time on one card
       const result = new Promise<boolean>((resolve) => {
         permissionQueue = permissionQueue.then(async () => {
+          try {
           confirmCount++;
           const taskId = `perm-${Date.now()}`;
           const command = toolName === 'Bash' ? String((input as any).command || toolName) : `${toolName}(${JSON.stringify(input).slice(0, 100)})`;
-          const confirmCard = CardBuilder.confirm(projectName, command, taskId);
+          const confirmCard = CardBuilder.confirm(projectName, command, taskId, ctx.senderId);
 
           // Create or reuse the single confirm card
           if (!confirmMessageId) {
@@ -395,6 +400,11 @@ async function handleClaudeTask(
 
           resolve(allowed);
           return allowed;
+          } catch (err) {
+            logger.error({ err }, 'Permission request failed');
+            resolve(false);
+            return false;
+          }
         });
       });
       return result;

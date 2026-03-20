@@ -33,8 +33,8 @@ export function loadConfig(): Config {
     workspaceDir: requireEnv('WORKSPACE_DIR').replace(/^~/, process.env.HOME || ''),
     allowedUserIds: parseList(process.env.ALLOWED_USER_IDS),
     allowedGroupIds: parseList(process.env.ALLOWED_GROUP_IDS),
-    taskTimeoutMs: parseInt(process.env.TASK_TIMEOUT_MS || '300000', 10),
-    debounceMs: parseInt(process.env.DEBOUNCE_MS || '500', 10),
+    taskTimeoutMs: Number(process.env.TASK_TIMEOUT_MS) || 300000,
+    debounceMs: Number(process.env.DEBOUNCE_MS) || 500,
     botOpenId: process.env.BOT_OPEN_ID || '',
   };
 }

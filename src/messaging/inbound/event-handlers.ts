@@ -59,11 +59,21 @@ export function createPipeline(deps: PipelineDeps): {
           });
         } else if (action === 'confirm_danger') {
           const taskId = data?.action?.value?.taskId;
-          if (taskId) resolvePermission(taskId, true);
+          const expectedUserId = data?.action?.value?.expectedUserId;
+          if (expectedUserId && userId !== expectedUserId) {
+            logger.warn({ userId, expectedUserId, taskId }, 'Ignoring confirm click from non-initiator');
+          } else if (taskId) {
+            resolvePermission(taskId, true);
+          }
           // Card update handled by dispatch.ts — no updateCard here to avoid race condition
         } else if (action === 'reject_danger') {
           const taskId = data?.action?.value?.taskId;
-          if (taskId) resolvePermission(taskId, false);
+          const expectedUserId = data?.action?.value?.expectedUserId;
+          if (expectedUserId && userId !== expectedUserId) {
+            logger.warn({ userId, expectedUserId, taskId }, 'Ignoring reject click from non-initiator');
+          } else if (taskId) {
+            resolvePermission(taskId, false);
+          }
           // Card update handled by dispatch.ts
         } else if (action === 'reset_session') {
           if (userId) {

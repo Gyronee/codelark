@@ -152,7 +152,8 @@ export async function downloadFile(
   const buf = await extractBuffer(response);
   const uploadsDir = path.join(targetDir, '_uploads');
   fs.mkdirSync(uploadsDir, { recursive: true });
-  const localPath = path.join(uploadsDir, `${Date.now()}-${fileName}`);
+  const safeName = `${Date.now()}-${fileName.replace(/[\/\\]/g, '_')}`;
+  const localPath = path.join(uploadsDir, safeName);
   fs.writeFileSync(localPath, buf);
   logger.debug({ messageId, fileKey, localPath, size: buf.length }, 'Downloaded file');
   return { localPath, fileName };
