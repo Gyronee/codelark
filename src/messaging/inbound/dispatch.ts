@@ -449,8 +449,12 @@ async function handleClaudeTask(
     },
   }, userModel, ctx.senderId, db);
 
-  // Cleanup temp images
-  for (const imgPath of imagePaths) {
-    try { unlinkSync(imgPath); } catch { /* ignore */ }
+  // Cleanup temp images (delay to avoid race with Claude reading them)
+  if (imagePaths.length > 0) {
+    setTimeout(() => {
+      for (const imgPath of imagePaths) {
+        try { unlinkSync(imgPath); } catch { /* ignore */ }
+      }
+    }, 5000);
   }
 }

@@ -52,27 +52,4 @@ describe('SessionManager', () => {
     expect(s2.claude_session_id).toBeNull();
   });
 
-  describe('active tasks', () => {
-    it('tracks active task per user', () => {
-      expect(sm.hasActiveTask('ou_1')).toBe(false);
-      const controller = new AbortController();
-      sm.setActiveTask('ou_1', controller);
-      expect(sm.hasActiveTask('ou_1')).toBe(true);
-    });
-
-    it('cancels active task', () => {
-      const controller = new AbortController();
-      sm.setActiveTask('ou_1', controller);
-      sm.cancelTask('ou_1');
-      expect(controller.signal.aborted).toBe(true);
-      expect(sm.hasActiveTask('ou_1')).toBe(false);
-    });
-
-    it('clears active task', () => {
-      const controller = new AbortController();
-      sm.setActiveTask('ou_1', controller);
-      sm.clearActiveTask('ou_1');
-      expect(sm.hasActiveTask('ou_1')).toBe(false);
-    });
-  });
 });

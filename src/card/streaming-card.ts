@@ -115,7 +115,7 @@ export class StreamingCard {
     // CardKit failed — fallback to IM card
     logger.warn('CardKit failed, falling back to IM card');
     this.cardKitCardId = null;
-    this.flush = new FlushController(this.flush['updateFn'], IM_THROTTLE_MS);
+    this.flush = new FlushController(this.flush.update, IM_THROTTLE_MS);
     const thinkingCard = CardBuilder.thinking('Working');
     const messageId = this.userMessageId
       ? await replyCardToMessage(this.userMessageId, thinkingCard)

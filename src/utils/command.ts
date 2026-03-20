@@ -15,7 +15,8 @@ export function parseCommand(text: string): ParsedCommand | null {
     case '/project': {
       const action = parts[1] || null;
       const args = parts.slice(2);
-      if (!action) return null;
+      // If no action, treat as help request (show project list)
+      if (!action) return { type: 'project', action: 'list', args: [] };
       return { type: 'project', action, args };
     }
     case '/reset':

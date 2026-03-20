@@ -42,6 +42,7 @@ describe('CardBuilder', () => {
     const c = CardBuilder.cancelled('my-app');
     expect(c.header).toBeUndefined();
     expect(JSON.stringify(c)).toContain('已停止');
+    expect(JSON.stringify(c)).toContain('my-app');
   });
   it('builds fallback text', () => {
     expect(CardBuilder.buildFallbackText('**bold** text')).toBe('bold text');

@@ -14,6 +14,11 @@ export class FlushController {
     private throttleMs: number = 500,
   ) {}
 
+  /** Expose the update function so callers can create a new controller with different throttle */
+  get update(): (content: string) => Promise<void> {
+    return this.updateFn;
+  }
+
   schedule(content: string): void {
     this.pendingContent = content;
     if (this.flushInProgress) { this.needsReflush = true; return; }

@@ -2,6 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { parseCommand } from './command.js';
 
 describe('parseCommand', () => {
+  it('parses bare /project as list', () => {
+    expect(parseCommand('/project')).toEqual({
+      type: 'project', action: 'list', args: []
+    });
+  });
+
   it('parses /project list', () => {
     expect(parseCommand('/project list')).toEqual({
       type: 'project', action: 'list', args: []

@@ -162,7 +162,7 @@ export const CardBuilder = {
       config: { wide_screen_mode: true },
       elements: [
         { tag: 'markdown', content: '已停止' },
-        { tag: 'markdown', content: '已停止', text_size: 'notation' },
+        { tag: 'markdown', content: `已停止 · ${project}`, text_size: 'notation' },
       ],
     };
   },

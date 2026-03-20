@@ -12,6 +12,7 @@ export interface HistoryEntry {
 
 const MAX_ENTRIES = 20;
 const MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes
+const MAX_CHATS = 200;
 
 const histories = new Map<string, HistoryEntry[]>();
 
@@ -21,6 +22,11 @@ export function recordMessage(chatId: string, senderName: string, text: string):
   if (!entries) {
     entries = [];
     histories.set(chatId, entries);
+    // LRU eviction: drop oldest chat when map exceeds limit
+    if (histories.size > MAX_CHATS) {
+      const oldest = histories.keys().next().value!;
+      histories.delete(oldest);
+    }
   }
   entries.push({ senderName, text: text.slice(0, 500), timestamp: Date.now() });
   // Evict old entries
