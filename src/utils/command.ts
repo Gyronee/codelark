@@ -1,5 +1,5 @@
 export interface ParsedCommand {
-  type: 'project' | 'reset' | 'cancel' | 'status' | 'whoami' | 'help' | 'model' | 'file';
+  type: 'project' | 'reset' | 'cancel' | 'status' | 'whoami' | 'help' | 'model' | 'file' | 'auth';
   action: string | null;
   args: string[];
 }
@@ -36,6 +36,8 @@ export function parseCommand(text: string): ParsedCommand | null {
       const args = parts.slice(1);
       return { type: 'file', action: null, args };
     }
+    case '/auth':
+      return { type: 'auth', action: null, args: [] };
     default:
       return null;
   }

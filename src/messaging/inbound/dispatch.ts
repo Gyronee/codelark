@@ -6,7 +6,7 @@ import type { ProjectManager } from '../../project/manager.js';
 import { parseCommand } from '../../utils/command.js';
 import { resolve, basename } from 'path';
 import { existsSync, statSync, unlinkSync } from 'fs';
-import { sendText, sendCard, uploadFile, sendFile } from '../outbound/send.js';
+import { sendText, sendCard, updateCard, uploadFile, sendFile } from '../outbound/send.js';
 import { StreamingCard } from '../../card/streaming-card.js';
 import { CardBuilder, type ToolStatus } from '../../card/builder.js';
 import { executeClaudeTask, type ExecutionResult } from '../../claude/executor.js';
@@ -69,7 +69,8 @@ async function handleCommand(
         '/project create <名称> — 创建新空项目',
         '/project clone <地址> — 克隆 Git 仓库（仅支持 https）',
         '/project home — 切换到个人目录',
-        '/file <path> — 从项目目录获取文件', '',
+        '/file <path> — 从项目目录获取文件',
+        '/auth — 授权飞书账号（文档读写）', '',
         '直接发送文字即可与 Claude Code 对话。',
         '无需设置项目，系统会自动为你创建独立的工作目录。',
       ];
@@ -147,6 +148,61 @@ async function handleCommand(
       const fileKey = await uploadFile(fullPath, fileName);
       await sendFile(ctx.chatId, fileKey, threadId);
       return;
+    }
+    case 'auth': {
+      const { requestDeviceAuthorization, pollDeviceToken } = await import('../../auth/device-flow.js');
+      const { buildOAuthCard, buildOAuthSuccessCard, buildOAuthFailedCard } = await import('../../auth/oauth-card.js');
+
+      try {
+        const scopes = 'docx:document:create docx:document:readonly docx:document:write_only';
+        const deviceAuth = await requestDeviceAuthorization(config.feishu.appId, config.feishu.appSecret, scopes);
+        const card = buildOAuthCard(deviceAuth.verificationUriComplete, deviceAuth.userCode);
+        const messageId = await sendCard(ctx.chatId, card, ctx.threadId ?? undefined);
+
+        // Poll in background (fire-and-forget)
+        pollDeviceToken({
+          appId: config.feishu.appId,
+          appSecret: config.feishu.appSecret,
+          deviceCode: deviceAuth.deviceCode,
+          interval: deviceAuth.interval,
+          expiresIn: deviceAuth.expiresIn,
+        }).then(async (result) => {
+          if (result.ok) {
+            // Verify identity to prevent group chat hijacking
+            try {
+              const identityResp = await fetch('https://open.feishu.cn/open-apis/authen/v1/user_info', {
+                headers: { Authorization: `Bearer ${result.token.accessToken}` },
+              });
+              const identity = await identityResp.json() as { data?: { open_id?: string } };
+              const actualOpenId = identity.data?.open_id;
+              if (actualOpenId && actualOpenId !== ctx.senderId) {
+                if (messageId) await updateCard(messageId, buildOAuthFailedCard('授权用户与发起用户不匹配'));
+                return;
+              }
+            } catch (err) {
+              logger.warn({ err }, 'Identity verification failed, proceeding anyway');
+            }
+
+            const now = Date.now();
+            db.saveToken(ctx.senderId, {
+              accessToken: result.token.accessToken,
+              refreshToken: result.token.refreshToken,
+              expiresAt: now + result.token.expiresIn * 1000,
+              refreshExpiresAt: now + result.token.refreshExpiresIn * 1000,
+              scope: result.token.scope,
+              grantedAt: now,
+            });
+            if (messageId) await updateCard(messageId, buildOAuthSuccessCard());
+          } else {
+            if (messageId) await updateCard(messageId, buildOAuthFailedCard(result.message));
+          }
+        }).catch(err => logger.error({ err }, 'OAuth polling failed'));
+
+        return;
+      } catch (err: any) {
+        await reply(`授权发起失败: ${err.message}`);
+        return;
+      }
     }
   }
 }
