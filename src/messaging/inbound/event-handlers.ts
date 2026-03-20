@@ -59,11 +59,11 @@ export function createPipeline(deps: PipelineDeps): {
         } else if (action === 'confirm_danger') {
           const taskId = data?.action?.value?.taskId;
           if (taskId) resolvePermission(taskId, true);
-          // Card is updated by StreamingCard.resumeStreaming(), no action needed here
+          // Card update handled by dispatch.ts — no updateCard here to avoid race condition
         } else if (action === 'reject_danger') {
           const taskId = data?.action?.value?.taskId;
           if (taskId) resolvePermission(taskId, false);
-          // Card is updated by StreamingCard.resumeStreaming(), no action needed here
+          // Card update handled by dispatch.ts
         } else if (action === 'reset_session') {
           if (userId) {
             const user = deps.db.getUser(userId);

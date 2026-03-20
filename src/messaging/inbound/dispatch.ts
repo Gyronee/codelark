@@ -310,6 +310,7 @@ async function handleClaudeTask(
   const startTime = Date.now();
   let confirmMessageId: string | null = null;
   let confirmCount = 0;
+  let permissionQueue: Promise<boolean> = Promise.resolve(true);
 
   // Build prompt with context
   let prompt = ctx.text;
@@ -348,19 +349,52 @@ async function handleClaudeTask(
       if (match) match.status = 'done';
     },
     onPermissionRequest: async (toolName, input) => {
-      confirmCount++;
-      const taskId = `perm-${Date.now()}`;
-      const command = toolName === 'Bash' ? String((input as any).command || toolName) : `${toolName}(${JSON.stringify(input).slice(0, 100)})`;
-      const confirmCard = CardBuilder.confirm(projectName, command, taskId);
-      if (confirmMessageId) {
-        // Reuse existing confirm card
-        await updateCard(confirmMessageId, confirmCard);
-      } else {
-        // Create first confirm card
-        confirmMessageId = await sendCard(ctx.chatId, confirmCard, ctx.threadId ?? undefined);
-      }
-      const allowed = await requestPermission(taskId);
-      return allowed;
+      // Queue: serialize permission requests, show one at a time on one card
+      const result = new Promise<boolean>((resolve) => {
+        permissionQueue = permissionQueue.then(async () => {
+          confirmCount++;
+          const taskId = `perm-${Date.now()}`;
+          const command = toolName === 'Bash' ? String((input as any).command || toolName) : `${toolName}(${JSON.stringify(input).slice(0, 100)})`;
+          const confirmCard = CardBuilder.confirm(projectName, command, taskId);
+
+          // Create or reuse the single confirm card
+          if (!confirmMessageId) {
+            confirmMessageId = await sendCard(ctx.chatId, confirmCard, ctx.threadId ?? undefined);
+            if (!confirmMessageId) {
+              // sendCard failed — auto-deny, notify user
+              await sendText(ctx.chatId, '⚠️ 确认卡片发送失败，操作已自动跳过', ctx.threadId ?? undefined);
+              resolve(false);
+              return false;
+            }
+          } else {
+            await updateCard(confirmMessageId, confirmCard);
+          }
+
+          // Wait for user decision (or timeout/abort)
+          const allowed = await requestPermission(taskId, 60_000, abortController.signal);
+
+          // Update card after decision — dispatch is the sole owner
+          if (confirmMessageId) {
+            if (allowed) {
+              await updateCard(confirmMessageId, {
+                elements: [{ tag: 'markdown', content: '⏳ 已允许，执行中...', text_size: 'notation' }],
+              });
+            } else if (abortController.signal.aborted) {
+              await updateCard(confirmMessageId, {
+                elements: [{ tag: 'markdown', content: '⊘ 任务已取消', text_size: 'notation' }],
+              });
+            } else {
+              await updateCard(confirmMessageId, {
+                elements: [{ tag: 'markdown', content: '✗ 已拒绝', text_size: 'notation' }],
+              });
+            }
+          }
+
+          resolve(allowed);
+          return allowed;
+        });
+      });
+      return result;
     },
     onComplete: async (result: ExecutionResult) => {
       clearTimeout(timeout);
