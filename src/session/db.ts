@@ -29,6 +29,15 @@ export interface TaskLogRow {
   created_at: string;
 }
 
+export interface OAuthToken {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;      // Unix ms
+  refreshExpiresAt: number; // Unix ms
+  scope: string;
+  grantedAt: number;      // Unix ms
+}
+
 export class Database {
   private db: BetterSqlite3.Database;
 
@@ -66,6 +75,16 @@ export class Database {
         duration_ms INTEGER,
         status TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS oauth_tokens (
+        feishu_user_id TEXT PRIMARY KEY,
+        access_token TEXT NOT NULL,
+        refresh_token TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        refresh_expires_at INTEGER NOT NULL,
+        scope TEXT NOT NULL DEFAULT '',
+        granted_at INTEGER NOT NULL
       );
     `);
   }
@@ -150,6 +169,32 @@ export class Database {
     return this.db.prepare(
       'SELECT * FROM task_logs WHERE session_id = ? ORDER BY created_at DESC LIMIT ?'
     ).all(sessionId, limit) as TaskLogRow[];
+  }
+
+  saveToken(feishuUserId: string, token: OAuthToken): void {
+    this.db.prepare(`
+      INSERT OR REPLACE INTO oauth_tokens (feishu_user_id, access_token, refresh_token, expires_at, refresh_expires_at, scope, granted_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(feishuUserId, token.accessToken, token.refreshToken, token.expiresAt, token.refreshExpiresAt, token.scope, token.grantedAt);
+  }
+
+  getToken(feishuUserId: string): OAuthToken | null {
+    const row = this.db.prepare('SELECT * FROM oauth_tokens WHERE feishu_user_id = ?')
+      .get(feishuUserId) as { access_token: string; refresh_token: string; expires_at: number; refresh_expires_at: number; scope: string; granted_at: number } | undefined;
+    if (!row) return null;
+    return {
+      accessToken: row.access_token,
+      refreshToken: row.refresh_token,
+      expiresAt: row.expires_at,
+      refreshExpiresAt: row.refresh_expires_at,
+      scope: row.scope,
+      grantedAt: row.granted_at,
+    };
+  }
+
+  deleteToken(feishuUserId: string): void {
+    this.db.prepare('DELETE FROM oauth_tokens WHERE feishu_user_id = ?')
+      .run(feishuUserId);
   }
 
   close(): void {
