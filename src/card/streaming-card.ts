@@ -48,6 +48,7 @@ export class StreamingCard {
   private threadId: string | null;
   private userMessageId: string | null;
   private typingReactionId: string | null = null;
+  private lastContent: string = '';
 
   constructor(chatId: string, threadId: string | null, userMessageId: string | null) {
     this.chatId = chatId;
@@ -136,6 +137,7 @@ export class StreamingCard {
       await this.ensureCardCreated();
     }
     if (this.phase !== 'streaming') return;
+    this.lastContent = text;
     this.flush.schedule(text);
   }
 

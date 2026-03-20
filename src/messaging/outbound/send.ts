@@ -322,10 +322,13 @@ export async function updateCardKitCard(
       data: { card: { type: 'card_json' as const, data: JSON.stringify(card) }, sequence },
       path: { card_id: cardId },
     });
-    if (resp?.code && resp.code !== 0) return false;
+    if (resp?.code && resp.code !== 0) {
+      logger.warn({ code: resp.code, msg: (resp as any).msg, detail: JSON.stringify(resp).slice(0, 500), cardId, sequence }, 'CardKit update non-zero code');
+      return false;
+    }
     return true;
   } catch (err) {
-    logger.warn({ err, cardId }, 'Failed to update CardKit card');
+    logger.warn({ err, cardId, sequence }, 'Failed to update CardKit card');
     return false;
   }
 }

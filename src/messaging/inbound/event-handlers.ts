@@ -59,14 +59,11 @@ export function createPipeline(deps: PipelineDeps): {
         } else if (action === 'confirm_danger') {
           const taskId = data?.action?.value?.taskId;
           if (taskId) resolvePermission(taskId, true);
-          // Delete confirm card to keep chat clean
-          if (messageId) void deleteMessage(messageId);
+          // Card is updated by StreamingCard.resumeStreaming(), no action needed here
         } else if (action === 'reject_danger') {
           const taskId = data?.action?.value?.taskId;
           if (taskId) resolvePermission(taskId, false);
-          if (messageId) void updateCard(messageId, {
-            elements: [{ tag: 'markdown', content: '✗ 已拒绝执行', text_size: 'notation' }],
-          });
+          // Card is updated by StreamingCard.resumeStreaming(), no action needed here
         } else if (action === 'reset_session') {
           if (userId) {
             const user = deps.db.getUser(userId);
@@ -75,7 +72,9 @@ export function createPipeline(deps: PipelineDeps): {
               logger.info({ userId }, 'Session reset via card button');
             }
           }
-          if (messageId) void deleteMessage(messageId);
+          if (messageId) void updateCard(messageId, {
+            elements: [{ tag: 'markdown', content: '✓ 会话已重置', text_size: 'notation' }],
+          });
         }
       } catch (err) {
         logger.warn({ err }, 'card.action.trigger handler error');

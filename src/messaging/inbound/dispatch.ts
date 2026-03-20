@@ -308,6 +308,8 @@ async function handleClaudeTask(
   const timeout = setTimeout(() => abortController.abort(), config.taskTimeoutMs);
   const tools: ToolStatus[] = [];
   const startTime = Date.now();
+  let confirmMessageId: string | null = null;
+  let confirmCount = 0;
 
   // Build prompt with context
   let prompt = ctx.text;
@@ -346,14 +348,29 @@ async function handleClaudeTask(
       if (match) match.status = 'done';
     },
     onPermissionRequest: async (toolName, input) => {
+      confirmCount++;
       const taskId = `perm-${Date.now()}`;
       const command = toolName === 'Bash' ? String((input as any).command || toolName) : `${toolName}(${JSON.stringify(input).slice(0, 100)})`;
-      await sendCard(ctx.chatId, CardBuilder.confirm(projectName, command, taskId), ctx.threadId ?? undefined);
-      return requestPermission(taskId);
+      const confirmCard = CardBuilder.confirm(projectName, command, taskId);
+      if (confirmMessageId) {
+        // Reuse existing confirm card
+        await updateCard(confirmMessageId, confirmCard);
+      } else {
+        // Create first confirm card
+        confirmMessageId = await sendCard(ctx.chatId, confirmCard, ctx.threadId ?? undefined);
+      }
+      const allowed = await requestPermission(taskId);
+      return allowed;
     },
     onComplete: async (result: ExecutionResult) => {
       clearTimeout(timeout);
       registry.removeActive(queueKey);
+      // Update confirm card to final summary
+      if (confirmMessageId) {
+        await updateCard(confirmMessageId, {
+          elements: [{ tag: 'markdown', content: `✓ 任务完成，共确认 ${confirmCount} 次操作`, text_size: 'notation' }],
+        });
+      }
       if (result.sessionId) db.updateClaudeSessionId(session.id, result.sessionId);
       db.logTask(session.id, ctx.text, result.text, JSON.stringify(tools.map(t => t.tool)), result.durationMs, 'success');
       if (card.isTerminal) { await card.fallbackText(CardBuilder.buildFallbackText(result.text)); }
@@ -368,6 +385,11 @@ async function handleClaudeTask(
     onError: async (error) => {
       clearTimeout(timeout);
       registry.removeActive(queueKey);
+      if (confirmMessageId) {
+        await updateCard(confirmMessageId, {
+          elements: [{ tag: 'markdown', content: `✗ 任务异常，共确认 ${confirmCount} 次操作`, text_size: 'notation' }],
+        });
+      }
       db.logTask(session.id, ctx.text, error, null, Date.now() - startTime, 'error');
       if (abortController.signal.aborted) {
         if (!card.isTerminal) await card.abort(CardBuilder.cancelled(projectName));
