@@ -9,7 +9,7 @@ import { checkGate } from './gate.js';
 import { dispatch } from './dispatch.js';
 import { ChatQueue, buildQueueKey } from '../../channel/chat-queue.js';
 import * as registry from '../../channel/active-registry.js';
-import { fetchMessageContent, updateCard } from '../outbound/send.js';
+import { fetchMessageContent, updateCard, deleteMessage } from '../outbound/send.js';
 import { recordMessage } from '../../channel/chat-history.js';
 import { resolvePermission } from './card-actions.js';
 import { logger } from '../../logger.js';
@@ -38,18 +38,8 @@ export function createPipeline(deps: PipelineDeps): {
       try {
         const action = data?.action?.value?.action;
         const userId = data?.operator?.open_id;
-        const messageId = data?.open_message_id;
+        const messageId = data?.context?.open_message_id ?? data?.open_message_id;
         logger.info({ action, userId, messageId }, 'Card action received');
-
-        // Update the card to a minimal result after action
-        const replaceCard = (text: string) => {
-          if (messageId) {
-            void updateCard(messageId, {
-              config: { wide_screen_mode: true },
-              elements: [{ tag: 'markdown', content: text, text_size: 'notation' }],
-            });
-          }
-        };
 
         if (action === 'cancel_task') {
           if (userId) {
@@ -62,15 +52,21 @@ export function createPipeline(deps: PipelineDeps): {
               logger.info({ key, userId }, 'Task cancelled via card button');
             }
           }
-          replaceCard('⊘ 已取消任务');
+          // Keep cancel card visible as feedback
+          if (messageId) void updateCard(messageId, {
+            elements: [{ tag: 'markdown', content: '⊘ 已取消任务', text_size: 'notation' }],
+          });
         } else if (action === 'confirm_danger') {
           const taskId = data?.action?.value?.taskId;
           if (taskId) resolvePermission(taskId, true);
-          replaceCard('✓ 已允许执行');
+          // Delete confirm card to keep chat clean
+          if (messageId) void deleteMessage(messageId);
         } else if (action === 'reject_danger') {
           const taskId = data?.action?.value?.taskId;
           if (taskId) resolvePermission(taskId, false);
-          replaceCard('✗ 已拒绝执行');
+          if (messageId) void updateCard(messageId, {
+            elements: [{ tag: 'markdown', content: '✗ 已拒绝执行', text_size: 'notation' }],
+          });
         } else if (action === 'reset_session') {
           if (userId) {
             const user = deps.db.getUser(userId);
@@ -79,7 +75,7 @@ export function createPipeline(deps: PipelineDeps): {
               logger.info({ userId }, 'Session reset via card button');
             }
           }
-          replaceCard('✓ 会话已重置');
+          if (messageId) void deleteMessage(messageId);
         }
       } catch (err) {
         logger.warn({ err }, 'card.action.trigger handler error');

@@ -92,19 +92,24 @@ export async function executeClaudeTask(
         ...(resumeSessionId ? { resume: resumeSessionId } : {}),
         abortController,
         model: model || process.env.CLAUDE_MODEL || 'claude-opus-4-6',
-        allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
+        allowedTools: [
+          'Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep',
+          'mcp__feishu-docs__feishu_doc_create',
+          'mcp__feishu-docs__feishu_doc_fetch',
+          'mcp__feishu-docs__feishu_doc_update',
+        ],
         permissionMode: 'default',
         canUseTool: async (toolName, input, _options) => {
           const safeTools = ['Read', 'Glob', 'Grep', 'Write', 'Edit'];
-          if (safeTools.includes(toolName)) {
-            return { behavior: 'allow' as const, updatedInput: {} };
+          if (safeTools.includes(toolName) || toolName.startsWith('mcp__feishu-docs__')) {
+            return { behavior: 'allow' as const, updatedInput: input as Record<string, unknown> };
           }
           const allowed = await callbacks.onPermissionRequest(
             toolName,
             input as Record<string, unknown>,
           );
           if (allowed) {
-            return { behavior: 'allow' as const, updatedInput: {} };
+            return { behavior: 'allow' as const, updatedInput: input as Record<string, unknown> };
           }
           return { behavior: 'deny' as const, message: 'User denied the operation' };
         },

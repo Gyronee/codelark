@@ -125,6 +125,16 @@ export async function replyCardByCardId(replyToMessageId: string, cardId: string
   }
 }
 
+export async function deleteMessage(messageId: string): Promise<boolean> {
+  try {
+    await client.im.v1.message.delete({ path: { message_id: messageId } });
+    return true;
+  } catch (err) {
+    logger.warn({ err, messageId }, 'Failed to delete message');
+    return false;
+  }
+}
+
 export async function updateCard(messageId: string, card: object): Promise<boolean> {
   try {
     await client.im.v1.message.patch({
