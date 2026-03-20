@@ -146,6 +146,7 @@ export const CardBuilder = {
   },
   confirm(project: string, command: string, taskId: string): FeishuCard {
     return {
+      config: { wide_screen_mode: true, update_multi: true },
       header: { title: { tag: 'plain_text', content: `⚠️ Confirm · ${project}` }, template: 'yellow' },
       elements: [
         { tag: 'div', text: { tag: 'lark_md', content: `Claude wants to execute:\n\`\`\`\n${command}\n\`\`\`` } },

@@ -377,14 +377,17 @@ async function handleClaudeTask(
           if (confirmMessageId) {
             if (allowed) {
               await updateCard(confirmMessageId, {
+                config: { update_multi: true },
                 elements: [{ tag: 'markdown', content: '⏳ 已允许，执行中...', text_size: 'notation' }],
               });
             } else if (abortController.signal.aborted) {
               await updateCard(confirmMessageId, {
+                config: { update_multi: true },
                 elements: [{ tag: 'markdown', content: '⊘ 任务已取消', text_size: 'notation' }],
               });
             } else {
               await updateCard(confirmMessageId, {
+                config: { update_multi: true },
                 elements: [{ tag: 'markdown', content: '✗ 已拒绝', text_size: 'notation' }],
               });
             }
@@ -402,6 +405,7 @@ async function handleClaudeTask(
       // Update confirm card to final summary
       if (confirmMessageId) {
         await updateCard(confirmMessageId, {
+          config: { update_multi: true },
           elements: [{ tag: 'markdown', content: `✓ 任务完成，共确认 ${confirmCount} 次操作`, text_size: 'notation' }],
         });
       }
@@ -421,6 +425,7 @@ async function handleClaudeTask(
       registry.removeActive(queueKey);
       if (confirmMessageId) {
         await updateCard(confirmMessageId, {
+          config: { update_multi: true },
           elements: [{ tag: 'markdown', content: `✗ 任务异常，共确认 ${confirmCount} 次操作`, text_size: 'notation' }],
         });
       }

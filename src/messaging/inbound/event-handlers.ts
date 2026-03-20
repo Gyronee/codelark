@@ -54,6 +54,7 @@ export function createPipeline(deps: PipelineDeps): {
           }
           // Keep cancel card visible as feedback
           if (messageId) void updateCard(messageId, {
+            config: { update_multi: true },
             elements: [{ tag: 'markdown', content: '⊘ 已取消任务', text_size: 'notation' }],
           });
         } else if (action === 'confirm_danger') {
@@ -73,6 +74,7 @@ export function createPipeline(deps: PipelineDeps): {
             }
           }
           if (messageId) void updateCard(messageId, {
+            config: { update_multi: true },
             elements: [{ tag: 'markdown', content: '✓ 会话已重置', text_size: 'notation' }],
           });
         }
