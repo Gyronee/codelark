@@ -5,6 +5,7 @@ export interface UserRow {
   feishu_user_id: string;
   name: string | null;
   active_project: string | null;
+  active_cwd: string | null;
   resumed_session_id: string | null;
   resumed_cwd: string | null;
   created_at: string;
@@ -101,6 +102,12 @@ export class Database {
     } catch {
       // column already exists
     }
+
+    try {
+      this.db.exec('ALTER TABLE users ADD COLUMN active_cwd TEXT;');
+    } catch {
+      // column already exists
+    }
   }
 
   upsertUser(feishuUserId: string, name: string | null): void {
@@ -117,8 +124,13 @@ export class Database {
   }
 
   setActiveProject(feishuUserId: string, projectName: string | null): void {
-    this.db.prepare('UPDATE users SET active_project = ? WHERE feishu_user_id = ?')
+    this.db.prepare('UPDATE users SET active_project = ?, active_cwd = NULL WHERE feishu_user_id = ?')
       .run(projectName, feishuUserId);
+  }
+
+  setActiveProjectWithCwd(feishuUserId: string, projectName: string, cwd: string): void {
+    this.db.prepare('UPDATE users SET active_project = ?, active_cwd = ? WHERE feishu_user_id = ?')
+      .run(projectName, cwd, feishuUserId);
   }
 
   setResumedSession(feishuUserId: string, sessionId: string, cwd: string): void {

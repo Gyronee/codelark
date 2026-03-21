@@ -34,7 +34,16 @@ function resolveProjectPath(
 ): { projectName: string; projectPath: string } {
   const user = db.getUser(senderId);
   if (user?.active_project) {
-    return { projectName: user.active_project, projectPath: projectManager.resolve(user.active_project) };
+    // Local CLI project with stored cwd
+    if (user.active_cwd) {
+      return { projectName: user.active_project, projectPath: user.active_cwd };
+    }
+    // Bot project
+    try {
+      return { projectName: user.active_project, projectPath: projectManager.resolve(user.active_project) };
+    } catch {
+      // Project not found — fall through to default
+    }
   }
   return { projectName: DEFAULT_PROJECT_LABEL, projectPath: projectManager.ensureUserDefault(senderId) };
 }
@@ -87,7 +96,8 @@ async function handleCommand(
         '/whoami — 查看你的 open\\_id',
         '/reset — 重置当前对话上下文',
         '/cancel — 取消正在执行的任务',
-        '/model — 查看/切换模型（opus, sonnet, haiku）', '',
+        '/model — 查看/切换模型（opus, sonnet, haiku）',
+        '/rename <名称> — 给当前会话命名', '',
         '**项目管理**',
         '/project list — 列出所有项目',
         '/project use <名称> — 切换到指定项目',
@@ -322,6 +332,23 @@ async function handleCommand(
         return;
       }
     }
+    case 'rename': {
+      const title = cmd.args.join(' ');
+      if (!title) { await reply('用法: /rename <名称>'); break; }
+      const user = db.getUser(ctx.senderId);
+      const projectName = user?.active_project || DEFAULT_PROJECT_LABEL;
+      const session = sessionManager.getOrCreate(ctx.senderId, ctx.threadId, projectName);
+      const sessionId = user?.resumed_session_id || session.claude_session_id;
+      if (!sessionId) { await reply('当前没有活跃的会话可以命名'); break; }
+      try {
+        const { renameSession } = await import('@anthropic-ai/claude-agent-sdk');
+        await renameSession(sessionId, title);
+        await reply(`会话已命名: ${title}`);
+      } catch (err: any) {
+        await reply(`命名失败: ${err.message}`);
+      }
+      break;
+    }
     case 'session': {
       const { listLocalSessions, findSessionById, getRecentMessages } = await import('../../session/local-sessions.js');
 
@@ -443,8 +470,8 @@ async function handleProjectCommand(
         await reply(`项目 "${name}" 未找到`);
         break;
       }
-      // Set active project so /status shows it
-      db.setActiveProject(ctx.senderId, name);
+      // Set active project with cwd from most recent local session
+      db.setActiveProjectWithCwd(ctx.senderId, name, localSessions[0].cwd);
       // Show sessions for this project, guide user to resume
       const lines: string[] = [];
       for (const s of localSessions) {

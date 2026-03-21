@@ -1,5 +1,5 @@
 export interface ParsedCommand {
-  type: 'project' | 'reset' | 'cancel' | 'status' | 'whoami' | 'help' | 'model' | 'file' | 'auth' | 'session';
+  type: 'project' | 'reset' | 'cancel' | 'status' | 'whoami' | 'help' | 'model' | 'file' | 'auth' | 'session' | 'rename';
   action: string | null;
   args: string[];
 }
@@ -43,6 +43,10 @@ export function parseCommand(text: string): ParsedCommand | null {
       const action = parts[1] || null;
       if (!action) return { type: 'session', action: 'list', args: [] };
       return { type: 'session', action, args: parts.slice(2) };
+    }
+    case '/rename': {
+      const title = parts.slice(1).join(' ');
+      return { type: 'rename', action: null, args: title ? [title] : [] };
     }
     default:
       return null;

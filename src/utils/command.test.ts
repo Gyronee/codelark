@@ -109,4 +109,16 @@ describe('parseCommand', () => {
       type: 'project', action: 'access', args: []
     });
   });
+
+  it('parses /rename with title', () => {
+    expect(parseCommand('/rename My Session Title')).toEqual({
+      type: 'rename', action: null, args: ['My Session Title']
+    });
+  });
+
+  it('parses /rename without title', () => {
+    expect(parseCommand('/rename')).toEqual({
+      type: 'rename', action: null, args: []
+    });
+  });
 });

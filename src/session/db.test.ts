@@ -31,6 +31,32 @@ describe('Database', () => {
       expect(user?.active_project).toBe('my-app');
     });
 
+    it('setActiveProjectWithCwd stores project and cwd', () => {
+      db.upsertUser('ou_123', 'Alice');
+      db.setActiveProjectWithCwd('ou_123', 'my-app', '/home/user/my-app');
+      const user = db.getUser('ou_123');
+      expect(user?.active_project).toBe('my-app');
+      expect(user?.active_cwd).toBe('/home/user/my-app');
+    });
+
+    it('setActiveProject clears active_cwd', () => {
+      db.upsertUser('ou_123', 'Alice');
+      db.setActiveProjectWithCwd('ou_123', 'my-app', '/home/user/my-app');
+      db.setActiveProject('ou_123', 'other-project');
+      const user = db.getUser('ou_123');
+      expect(user?.active_project).toBe('other-project');
+      expect(user?.active_cwd).toBeNull();
+    });
+
+    it('setActiveProject(null) clears active_cwd', () => {
+      db.upsertUser('ou_123', 'Alice');
+      db.setActiveProjectWithCwd('ou_123', 'my-app', '/home/user/my-app');
+      db.setActiveProject('ou_123', null);
+      const user = db.getUser('ou_123');
+      expect(user?.active_project).toBeNull();
+      expect(user?.active_cwd).toBeNull();
+    });
+
     it('setResumedSession stores session id and cwd', () => {
       db.upsertUser('ou_123', 'Alice');
       db.setResumedSession('ou_123', 'session-xyz', '/home/user/project');
