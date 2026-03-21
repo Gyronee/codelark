@@ -94,10 +94,15 @@ function extractSessionIdFromTail(lines: string[]): string | null {
  * Extract a summary from the last user message in the tail lines.
  */
 function extractSummary(lines: string[], sessionId: string): string {
+  let customTitle = '';
   let lastUserText = '';
   for (const line of lines) {
     try {
       const obj = JSON.parse(line);
+      // Prefer customTitle (set via /rename in CLI)
+      if (obj.customTitle && typeof obj.customTitle === 'string') {
+        customTitle = obj.customTitle;
+      }
       if (obj.isSidechain) continue;
       if (obj.type === 'user' && obj.message) {
         const content = obj.message.content;
@@ -108,6 +113,7 @@ function extractSummary(lines: string[], sessionId: string): string {
       // skip
     }
   }
+  if (customTitle) return customTitle;
   if (lastUserText) {
     return lastUserText.length > 80 ? lastUserText.slice(0, 80) + '...' : lastUserText;
   }
