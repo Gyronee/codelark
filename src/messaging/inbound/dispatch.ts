@@ -443,6 +443,8 @@ async function handleProjectCommand(
         await reply(`项目 "${name}" 未找到`);
         break;
       }
+      // Set active project so /status shows it
+      db.setActiveProject(ctx.senderId, name);
       // Show sessions for this project, guide user to resume
       const lines: string[] = [];
       for (const s of localSessions) {
