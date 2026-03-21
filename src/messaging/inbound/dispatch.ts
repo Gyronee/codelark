@@ -30,6 +30,18 @@ function formatTimeAgo(ms: number): string {
   return `${Math.floor(diff / 86400_000)} 天前`;
 }
 
+/** Get current project name for the given context (group-aware) */
+function getCurrentProjectName(ctx: MessageContext, db: Database): string {
+  if (ctx.chatType === 'group') {
+    if (ctx.threadId) {
+      const binding = db.getThreadBinding(ctx.chatId, ctx.threadId);
+      if (binding?.projectName) return binding.projectName;
+    }
+    return ''; // group home, no named project
+  }
+  return db.getUser(ctx.senderId)?.active_project || '';
+}
+
 function resolveProjectPath(
   senderId: string, db: Database, projectManager: ProjectManager,
 ): { projectName: string; projectPath: string } {
@@ -104,7 +116,7 @@ async function handleCommand(
   switch (cmd.type) {
     case 'help': {
       const user = db.getUser(ctx.senderId);
-      const activeProject = user?.active_project || '';
+      const activeProject = getCurrentProjectName(ctx, db);
 
       const lines: string[] = [
         '**基本命令**',
@@ -273,8 +285,17 @@ async function handleCommand(
         await sendText(ctx.chatId, '用法: /file <文件路径>', threadId);
         return;
       }
-      const { projectPath: projectDir } = resolveProjectPath(ctx.senderId, db, projectManager);
-      const activeProject = db.getUser(ctx.senderId)?.active_project || 'My Workspace';
+      let projectDir: string;
+      let activeProject: string;
+      if (ctx.chatType === 'group') {
+        const resolved = resolveGroupProject(ctx.chatId, ctx.threadId, db, projectManager);
+        projectDir = resolved.projectPath;
+        activeProject = resolved.projectName;
+      } else {
+        const resolved = resolveProjectPath(ctx.senderId, db, projectManager);
+        projectDir = resolved.projectPath;
+        activeProject = getCurrentProjectName(ctx, db) || 'My Workspace';
+      }
       if (!hasAccess(ctx.senderId, activeProject, config.workspaceDir, config)) {
         await sendText(ctx.chatId, '没有权限访问当前项目的文件', threadId);
         return;
@@ -362,8 +383,7 @@ async function handleCommand(
       const { listLocalSessions, findSessionById, getRecentMessages } = await import('../../session/local-sessions.js');
 
       if (cmd.action === 'list' || !cmd.action) {
-        const currentUser = db.getUser(ctx.senderId);
-        const currentProject = currentUser?.active_project;
+        const currentProject = getCurrentProjectName(ctx, db) || null;
         let sessions = listLocalSessions(50);
         if (config.sessionTitledOnly) {
           sessions = sessions.filter(s => s.hasCustomTitle);
@@ -448,10 +468,17 @@ async function handleCommand(
       if (cmd.action === 'rename') {
         const title = cmd.args.join(' ');
         if (!title) { await reply('用法: /session rename <名称>'); return; }
-        const currentUser = db.getUser(ctx.senderId);
-        const projectName = currentUser?.active_project || DEFAULT_PROJECT_LABEL;
-        const session = sessionManager.getOrCreate(ctx.senderId, ctx.threadId, projectName);
-        const sessionId = currentUser?.resumed_session_id || session.claude_session_id;
+        let sessionId: string | null = null;
+        if (ctx.chatType === 'group') {
+          const groupProject = resolveGroupProject(ctx.chatId, ctx.threadId, db, projectManager);
+          const session = sessionManager.getOrCreateGroup(ctx.chatId, ctx.threadId, groupProject.projectName);
+          sessionId = session.claude_session_id;
+        } else {
+          const currentUser = db.getUser(ctx.senderId);
+          const projectName = currentUser?.active_project || DEFAULT_PROJECT_LABEL;
+          const session = sessionManager.getOrCreate(ctx.senderId, ctx.threadId, projectName);
+          sessionId = currentUser?.resumed_session_id || session.claude_session_id;
+        }
         if (!sessionId) { await reply('当前没有活跃的会话可以命名'); return; }
         try {
           const { renameSession } = await import('@anthropic-ai/claude-agent-sdk');
@@ -602,7 +629,7 @@ async function handleProjectCommand(
     case 'grant': {
       const targetUser = cmd.args[0];
       if (!targetUser) { await reply('用法: /project grant <用户ID> [项目名]'); return; }
-      const targetProject = cmd.args[1] || user?.active_project;
+      const targetProject = cmd.args[1] || getCurrentProjectName(ctx, db);
       if (!targetProject) { await reply('请先切换到一个项目，或指定项目名'); return; }
       if (!canGrant(ctx.senderId, targetProject, config.workspaceDir, config)) {
         await reply('没有权限：只有项目创建者或管理员可以授权'); return;
@@ -614,7 +641,7 @@ async function handleProjectCommand(
     case 'revoke': {
       const targetUser = cmd.args[0];
       if (!targetUser) { await reply('用法: /project revoke <用户ID> [项目名]'); return; }
-      const targetProject = cmd.args[1] || user?.active_project;
+      const targetProject = cmd.args[1] || getCurrentProjectName(ctx, db);
       if (!targetProject) { await reply('请先切换到一个项目，或指定项目名'); return; }
       if (!canGrant(ctx.senderId, targetProject, config.workspaceDir, config)) {
         await reply('没有权限：只有项目创建者或管理员可以撤销授权'); return;
@@ -624,7 +651,7 @@ async function handleProjectCommand(
       break;
     }
     case 'access': {
-      const targetProject = cmd.args[0] || user?.active_project;
+      const targetProject = cmd.args[0] || getCurrentProjectName(ctx, db);
       if (!targetProject) { await reply('请先切换到一个项目，或指定项目名'); return; }
       const users = getProjectAccess(config.workspaceDir, targetProject);
       if (users.length === 0) {
