@@ -716,6 +716,10 @@ async function handleClaudeTask(
     const resolved = await resolveGroupProject(ctx.chatId, ctx.threadId, db, projectManager);
     projectPath = resolved.projectPath;
     projectName = resolved.projectName;
+    if (!hasAccess(ctx.senderId, projectName, config.workspaceDir, config)) {
+      await sendText(ctx.chatId, '没有权限访问当前项目，请联系管理员', threadId, replyMsgId);
+      return;
+    }
     session = sessionManager.getOrCreateGroup(ctx.chatId, ctx.threadId, projectName);
   } else {
     // P2P: existing per-user logic
