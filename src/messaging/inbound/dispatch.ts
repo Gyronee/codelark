@@ -817,7 +817,8 @@ async function handleClaudeTask(
 
           // Create or reuse the single confirm card
           if (!confirmMessageId) {
-            confirmMessageId = await sendCard(ctx.chatId, confirmCard, threadId);
+            const confirmReplyMsgId = threadId ? ctx.messageId : undefined;
+            confirmMessageId = await sendCard(ctx.chatId, confirmCard, threadId, confirmReplyMsgId);
             if (!confirmMessageId) {
               // sendCard failed — auto-deny, notify user
               await sendText(ctx.chatId, '⚠️ 确认卡片发送失败，操作已自动跳过', threadId);
