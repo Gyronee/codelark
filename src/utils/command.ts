@@ -19,6 +19,8 @@ export function parseCommand(text: string): ParsedCommand | null {
       if (!action) return { type: 'project', action: 'list', args: [] };
       return { type: 'project', action, args };
     }
+    case '/new':
+      return { type: 'session', action: 'new', args: [] };
     case '/cancel':
       return { type: 'cancel', action: null, args: [] };
     case '/status':
