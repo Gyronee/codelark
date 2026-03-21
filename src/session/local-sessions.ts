@@ -110,20 +110,48 @@ function extractSessionIdFromTail(lines: string[]): string | null {
 }
 
 /**
- * Extract a summary from the last user message in the tail lines.
+ * Find customTitle by scanning for the short "custom-title" entries.
+ * These are ~100 bytes each, so we can scan efficiently with a regex on chunks.
  */
-function extractSummary(headLines: string[], tailLines: string[], sessionId: string): string {
-  // Search head first for customTitle (more likely near start of file)
-  for (const lines of [headLines, tailLines]) {
-    for (const line of lines) {
-      try {
-        const obj = JSON.parse(line);
-        if (obj.customTitle && typeof obj.customTitle === 'string') {
-          return obj.customTitle;
-        }
-      } catch { /* skip */ }
+function findCustomTitle(filePath: string): string | null {
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    const stat = fs.fstatSync(fd);
+    // Read in 64KB chunks, searching for "custom-title" entries
+    const chunkSize = 65536;
+    let offset = 0;
+    while (offset < stat.size) {
+      const readSize = Math.min(chunkSize, stat.size - offset);
+      const buf = Buffer.alloc(readSize);
+      fs.readSync(fd, buf, 0, readSize, offset);
+      const text = buf.toString('utf-8');
+      // Quick check before expensive JSON parsing
+      const idx = text.indexOf('"custom-title"');
+      if (idx >= 0) {
+        // Find the line containing it
+        const lineStart = text.lastIndexOf('\n', idx) + 1;
+        const lineEnd = text.indexOf('\n', idx);
+        const line = text.slice(lineStart, lineEnd > 0 ? lineEnd : undefined);
+        try {
+          const obj = JSON.parse(line);
+          if (obj.customTitle) return obj.customTitle;
+        } catch { /* try next occurrence */ }
+      }
+      offset += readSize;
     }
-  }
+  } catch { /* ignore */ }
+  finally { fs.closeSync(fd); }
+  return null;
+}
+
+/**
+ * Extract a summary: customTitle > last user message > sessionId prefix.
+ */
+function extractSummary(filePath: string, tailLines: string[], sessionId: string): string {
+  // Try customTitle first (scan file for "custom-title" entries)
+  const title = findCustomTitle(filePath);
+  if (title) return title;
+
   // Fallback: last user message from tail
   let lastUserText = '';
   for (const line of tailLines) {
@@ -250,9 +278,7 @@ export function listLocalSessions(limit = 15): LocalSession[] {
           if (/\/users\/ou_/.test(cwd)) continue;
 
           const sessionId = extractSessionIdFromTail(lines) || baseName;
-          // Read head for customTitle (tail may not have it in large files)
-          const headLines = readHead(filePath, 4096);
-          const summary = extractSummary(headLines, lines, sessionId);
+          const summary = extractSummary(filePath, lines, sessionId);
           const activeInfo = activeSessions.get(sessionId);
 
           sessions.push({
