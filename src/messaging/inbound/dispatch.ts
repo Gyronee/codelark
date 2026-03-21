@@ -421,6 +421,10 @@ async function handleCommand(
       }
 
       if (cmd.action === 'resume') {
+        if (ctx.chatType === 'group') {
+          await reply('群聊中不支持恢复 CLI 会话，请在单聊中使用 /session resume');
+          return;
+        }
         const idPrefix = cmd.args[0];
         if (!idPrefix) { await reply('用法: /session resume <ID>'); return; }
 
@@ -474,6 +478,16 @@ async function handleCommand(
         if (!title) { await reply('用法: /session rename <名称>'); return; }
         let sessionId: string | null = null;
         if (ctx.chatType === 'group') {
+          // Only admin or thread creator can rename group session
+          let canRename = isAdmin(ctx.senderId, config) || await isGroupAdmin(ctx.chatId, ctx.senderId);
+          if (!canRename && ctx.threadId) {
+            const binding = db.getThreadBinding(ctx.chatId, ctx.threadId);
+            if (binding?.creatorUserId === ctx.senderId) canRename = true;
+          }
+          if (!canRename) {
+            await reply('只有群管理员或话题发起者可以命名会话');
+            return;
+          }
           const groupProject = resolveGroupProject(ctx.chatId, ctx.threadId, db, projectManager);
           const session = sessionManager.getOrCreateGroup(ctx.chatId, ctx.threadId, groupProject.projectName);
           sessionId = session.claude_session_id;
@@ -607,6 +621,7 @@ async function handleProjectCommand(
       break;
     }
     case 'create': {
+      if (ctx.chatType === 'group') { await reply('请在单聊中创建项目'); break; }
       const name = cmd.args[0];
       if (!name) { await reply('用法: /project create <名称>'); return; }
       try { projectManager.create(name, ctx.senderId); db.setActiveProject(ctx.senderId, name); await reply(`项目已创建: ${name}`); }
@@ -614,6 +629,7 @@ async function handleProjectCommand(
       break;
     }
     case 'clone': {
+      if (ctx.chatType === 'group') { await reply('请在单聊中克隆项目'); break; }
       const url = cmd.args[0];
       if (!url) { await reply('用法: /project clone <https://地址>'); return; }
       try {
@@ -625,6 +641,7 @@ async function handleProjectCommand(
       break;
     }
     case 'home': {
+      if (ctx.chatType === 'group') { await reply('群聊中不支持此命令'); break; }
       db.setActiveProject(ctx.senderId, null);
       projectManager.ensureUserDefault(ctx.senderId);
       await reply('已切换到个人目录');
