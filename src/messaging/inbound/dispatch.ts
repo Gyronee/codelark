@@ -338,7 +338,7 @@ async function handleProjectCommand(
     case 'create': {
       const name = cmd.args[0];
       if (!name) { await reply('用法: /project create <名称>'); return; }
-      try { projectManager.create(name); db.setActiveProject(ctx.senderId, name); await reply(`项目已创建: ${name}`); }
+      try { projectManager.create(name, ctx.senderId); db.setActiveProject(ctx.senderId, name); await reply(`项目已创建: ${name}`); }
       catch (e: any) { await reply(e.message); }
       break;
     }
@@ -347,7 +347,7 @@ async function handleProjectCommand(
       if (!url) { await reply('用法: /project clone <https://地址>'); return; }
       try {
         await reply(`正在克隆 ${url}...`);
-        const { name } = await projectManager.clone(url);
+        const { name } = await projectManager.clone(url, ctx.senderId);
         db.setActiveProject(ctx.senderId, name);
         await reply(`已克隆并切换到: ${name}`);
       } catch (e: any) { await reply(e.message); }

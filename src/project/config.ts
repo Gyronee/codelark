@@ -5,6 +5,7 @@ export interface ProjectEntry {
   path: string;
   description: string;
   defaultBranch?: string;
+  creator?: string;
 }
 
 export interface WorkspaceConfig {

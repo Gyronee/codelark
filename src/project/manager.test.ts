@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ProjectManager } from './manager.js';
+import { readConfig } from './config.js';
 import { mkdirSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
 
@@ -41,6 +42,18 @@ describe('ProjectManager', () => {
     it('rejects invalid project names', () => {
       expect(() => pm.create('../evil')).toThrow();
       expect(() => pm.create('foo bar')).toThrow();
+    });
+
+    it('stores creator in config when userId is provided', () => {
+      pm.create('my-app', 'ou_abc123');
+      const config = readConfig(TEST_WORKSPACE);
+      expect(config.projects['my-app'].creator).toBe('ou_abc123');
+    });
+
+    it('does not store creator in config when userId is omitted', () => {
+      pm.create('my-app');
+      const config = readConfig(TEST_WORKSPACE);
+      expect(config.projects['my-app'].creator).toBeUndefined();
     });
   });
 

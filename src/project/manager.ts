@@ -37,7 +37,7 @@ export class ProjectManager {
     return fullPath;
   }
 
-  create(name: string): string {
+  create(name: string, userId?: string): string {
     if (!VALID_NAME.test(name)) {
       throw new Error(`Invalid project name "${name}". Only [a-zA-Z0-9_-] allowed.`);
     }
@@ -52,6 +52,7 @@ export class ProjectManager {
       path: `projects/${name}`,
       description: '',
       defaultBranch: 'main',
+      ...(userId !== undefined ? { creator: userId } : {}),
     };
     writeConfig(this.workspaceDir, config);
     logger.info({ name, path: projectPath }, 'Project created');
@@ -75,7 +76,7 @@ export class ProjectManager {
     }
   }
 
-  async clone(url: string): Promise<{ name: string; path: string }> {
+  async clone(url: string, userId?: string): Promise<{ name: string; path: string }> {
     this.validateCloneUrl(url);
     const repoName = url.split('/').pop()?.replace(/\.git$/, '') || 'repo';
     const shortId = randomBytes(3).toString('hex');
@@ -88,6 +89,7 @@ export class ProjectManager {
     config.projects[dirName] = {
       path: `tmp/${dirName}`,
       description: `Cloned from ${url}`,
+      ...(userId !== undefined ? { creator: userId } : {}),
     };
     writeConfig(this.workspaceDir, config);
     logger.info({ name: dirName, url }, 'Repository cloned');
