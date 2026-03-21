@@ -36,6 +36,9 @@ export function hasAccess(userId: string, projectName: string, workspaceDir: str
   // Personal directory — always accessible
   if (projectName === 'My Workspace') return true;
 
+  // Group home project — accessible to all gate-passed users
+  if (projectName.startsWith('group-')) return true;
+
   // Project creator
   const wsConfig = readConfig(workspaceDir);
   const project = wsConfig.projects[projectName];
