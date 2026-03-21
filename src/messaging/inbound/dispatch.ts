@@ -109,7 +109,16 @@ async function handleCommand(
     case 'status': {
       const user = db.getUser(ctx.senderId);
       const active = registry.getByUserId(ctx.senderId);
-      await reply(`Project: ${user?.active_project || '(default)'}\nTask running: ${active ? 'yes' : 'no'}`);
+      const lines = [
+        `📁 项目: ${user?.active_project || '个人目录'}`,
+        `⚡ 任务: ${active ? '执行中' : '空闲'}`,
+      ];
+      if (user?.resumed_session_id) {
+        const shortId = user.resumed_session_id.slice(0, 8);
+        const projectName = user.resumed_cwd?.split('/').pop() || '未知';
+        lines.push(`🔄 恢复会话: ${shortId} (${projectName})`);
+      }
+      await reply(lines.join('\n'));
       break;
     }
     case 'reset': {
