@@ -9,6 +9,12 @@ import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { callFeishuMcp } from './feishu-mcp.js';
 import { getValidAccessToken, NeedAuthorizationError } from '../auth/token-store.js';
+import { createLarkClient } from './feishu-oapi.js';
+import { createSearchTool } from './feishu-search.js';
+import { createWikiSpaceTool, createWikiSpaceNodeTool } from './feishu-wiki.js';
+import { createDriveFileTool } from './feishu-drive.js';
+import { createDocMediaTool } from './feishu-doc-media.js';
+import { createDocCommentsTool } from './feishu-doc-comments.js';
 import type { Database } from '../session/db.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
@@ -123,9 +129,25 @@ export function createFeishuDocServer(
       }),
   );
 
+  // Create Lark SDK client and bound withToken for new OAPI tools
+  const client = createLarkClient(appId, appSecret);
+  const boundWithToken = (action: (token: string) => Promise<CallToolResult>) =>
+    withToken(db, userId, appId, appSecret, action);
+
+  const searchTool = createSearchTool(boundWithToken);
+  const wikiSpaceTool = createWikiSpaceTool(boundWithToken, client);
+  const wikiSpaceNodeTool = createWikiSpaceNodeTool(boundWithToken, client);
+  const driveFileTool = createDriveFileTool(boundWithToken, client);
+  const docMediaTool = createDocMediaTool(boundWithToken, client);
+  const docCommentsTool = createDocCommentsTool(boundWithToken, client);
+
   return createSdkMcpServer({
     name: 'feishu-docs',
     version: '1.0.0',
-    tools: [feishuDocCreate, feishuDocFetch, feishuDocUpdate],
+    tools: [
+      feishuDocCreate, feishuDocFetch, feishuDocUpdate,
+      searchTool, wikiSpaceTool, wikiSpaceNodeTool,
+      driveFileTool, docMediaTool, docCommentsTool,
+    ],
   });
 }
