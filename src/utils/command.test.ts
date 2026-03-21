@@ -110,15 +110,15 @@ describe('parseCommand', () => {
     });
   });
 
-  it('parses /rename with title', () => {
-    expect(parseCommand('/rename My Session Title')).toEqual({
-      type: 'rename', action: null, args: ['My Session Title']
+  it('parses /session rename', () => {
+    expect(parseCommand('/session rename My Title')).toEqual({
+      type: 'session', action: 'rename', args: ['My', 'Title']
     });
   });
 
-  it('parses /rename without title', () => {
-    expect(parseCommand('/rename')).toEqual({
-      type: 'rename', action: null, args: []
+  it('parses /session new', () => {
+    expect(parseCommand('/session new')).toEqual({
+      type: 'session', action: 'new', args: []
     });
   });
 });

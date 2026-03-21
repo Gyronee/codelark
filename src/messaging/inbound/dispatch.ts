@@ -92,12 +92,10 @@ async function handleCommand(
       const lines: string[] = [
         '**基本命令**',
         '/help — 显示帮助信息',
-        '/status — 查看当前项目和任务状态',
+        '/status — 查看当前状态',
         '/whoami — 查看你的 open\\_id',
-        '/reset — 重置当前对话上下文',
         '/cancel — 取消正在执行的任务',
-        '/model — 查看/切换模型（opus, sonnet, haiku）',
-        '/rename <名称> — 给当前会话命名', '',
+        '/model — 查看/切换模型', '',
         '**项目管理**',
         '/project list — 列出所有项目',
         '/project use <名称> — 切换到指定项目',
@@ -120,8 +118,10 @@ async function handleCommand(
       }
 
       lines.push('', '**本地会话**');
-      lines.push('/session list — 列出本地 Claude Code 会话');
+      lines.push('/session list — 列出当前项目的会话');
       lines.push('/session resume <ID> — 恢复指定会话');
+      lines.push('/session new — 新建会话（清空上下文）');
+      lines.push('/session rename <名称> — 给当前会话命名');
       if (user?.resumed_session_id) {
         lines.push('/session exit — 退出恢复模式');
       }
@@ -155,10 +155,11 @@ async function handleCommand(
       break;
     }
     case 'reset': {
+      // Legacy alias for /session new
       const user = db.getUser(ctx.senderId);
       const project = user?.active_project || DEFAULT_PROJECT_LABEL;
       sessionManager.reset(ctx.senderId, ctx.threadId, project);
-      await reply('对话上下文已重置。');
+      await reply('已创建新会话。提示: 请使用 /session new 代替 /reset');
       break;
     }
     case 'cancel':
@@ -332,35 +333,26 @@ async function handleCommand(
         return;
       }
     }
-    case 'rename': {
-      const title = cmd.args.join(' ');
-      if (!title) { await reply('用法: /rename <名称>'); break; }
-      const user = db.getUser(ctx.senderId);
-      const projectName = user?.active_project || DEFAULT_PROJECT_LABEL;
-      const session = sessionManager.getOrCreate(ctx.senderId, ctx.threadId, projectName);
-      const sessionId = user?.resumed_session_id || session.claude_session_id;
-      if (!sessionId) { await reply('当前没有活跃的会话可以命名'); break; }
-      try {
-        const { renameSession } = await import('@anthropic-ai/claude-agent-sdk');
-        await renameSession(sessionId, title);
-        await reply(`会话已命名: ${title}`);
-      } catch (err: any) {
-        await reply(`命名失败: ${err.message}`);
-      }
-      break;
-    }
+    // /rename removed — use /session rename instead
     case 'session': {
       const { listLocalSessions, findSessionById, getRecentMessages } = await import('../../session/local-sessions.js');
 
       if (cmd.action === 'list' || !cmd.action) {
-        let sessions = listLocalSessions(20);
+        const currentUser = db.getUser(ctx.senderId);
+        const currentProject = currentUser?.active_project;
+        let sessions = listLocalSessions(50);
         if (config.sessionTitledOnly) {
           sessions = sessions.filter(s => s.hasCustomTitle);
         }
         sessions = sessions.filter(s => hasAccess(ctx.senderId, s.projectName, config.workspaceDir, config));
+        // Filter by current project if set
+        if (currentProject) {
+          sessions = sessions.filter(s => s.projectName === currentProject);
+        }
         sessions = sessions.slice(0, 10);
         if (sessions.length === 0) {
-          await reply('没有发现本地 Claude Code 会话。');
+          const scope = currentProject ? `项目 ${currentProject} 下` : '';
+          await reply(`没有发现${scope}可用的会话。`);
           return;
         }
         const lines: string[] = [];
@@ -369,11 +361,12 @@ async function handleCommand(
           const ago = formatTimeAgo(s.lastModified);
           const status = s.isActive ? ' · 🔒 使用中' : '';
           const title = s.summary !== s.sessionId.slice(0, 8) ? `**${s.summary}**` : '_(未命名)_';
-          lines.push(`${i + 1}. ${title}${status}\n    📁 ${s.projectName} · 🕐 ${ago} · ID: ${s.sessionId.slice(0, 8)}`);
+          lines.push(`${i + 1}. ${title}${status}\n    🕐 ${ago} · ID: ${s.sessionId.slice(0, 8)}`);
         }
-        lines.push('---\n输入 /session resume ID 恢复会话');
+        lines.push('---\n/session resume ID 恢复会话');
+        const headerTitle = currentProject ? `📋 ${currentProject} 的会话` : '📋 所有会话';
         await sendCard(ctx.chatId, {
-          header: { title: { tag: 'plain_text', content: '📋 本地 Claude Code 会话' }, template: 'blue' },
+          header: { title: { tag: 'plain_text', content: headerTitle }, template: 'blue' },
           elements: [{ tag: 'markdown', content: lines.join('\n\n') }],
         }, threadId);
         return;
@@ -428,7 +421,33 @@ async function handleCommand(
         return;
       }
 
-      await reply('用法: /session list | resume <ID> | exit');
+      if (cmd.action === 'rename') {
+        const title = cmd.args.join(' ');
+        if (!title) { await reply('用法: /session rename <名称>'); return; }
+        const currentUser = db.getUser(ctx.senderId);
+        const projectName = currentUser?.active_project || DEFAULT_PROJECT_LABEL;
+        const session = sessionManager.getOrCreate(ctx.senderId, ctx.threadId, projectName);
+        const sessionId = currentUser?.resumed_session_id || session.claude_session_id;
+        if (!sessionId) { await reply('当前没有活跃的会话可以命名'); return; }
+        try {
+          const { renameSession } = await import('@anthropic-ai/claude-agent-sdk');
+          await renameSession(sessionId, title);
+          await reply(`会话已命名: ${title}`);
+        } catch (err: any) {
+          await reply(`命名失败: ${err.message}`);
+        }
+        return;
+      }
+
+      if (cmd.action === 'new') {
+        const currentUser = db.getUser(ctx.senderId);
+        const project = currentUser?.active_project || DEFAULT_PROJECT_LABEL;
+        sessionManager.reset(ctx.senderId, ctx.threadId, project);
+        await reply('已创建新会话，对话上下文已清空。');
+        return;
+      }
+
+      await reply('用法: /session list | resume <ID> | rename <名称> | new | exit');
       return;
     }
   }
