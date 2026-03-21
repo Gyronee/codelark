@@ -61,14 +61,21 @@ function resolveProjectPath(
   return { projectName: DEFAULT_PROJECT_LABEL, projectPath: projectManager.ensureUserDefault(senderId) };
 }
 
-function resolveGroupProject(
+async function resolveGroupProject(
   chatId: string, threadId: string | null, db: Database, projectManager: ProjectManager,
-): { projectName: string; projectPath: string } {
+): Promise<{ projectName: string; projectPath: string }> {
   if (threadId) {
     const binding = db.getThreadBinding(chatId, threadId);
     if (binding?.projectName) {
+      // Try bot project first
       try { return { projectName: binding.projectName, projectPath: projectManager.resolve(binding.projectName) }; }
-      catch { /* not a bot project — fall through */ }
+      catch { /* not a bot project */ }
+      // Try local CLI project — find cwd from sessions
+      const { listLocalSessions: listSessions } = await import('../../session/local-sessions.js');
+      const localSession = listSessions(50).find((s: any) => s.projectName === binding.projectName);
+      if (localSession) {
+        return { projectName: binding.projectName, projectPath: localSession.cwd };
+      }
     }
   }
   const { path: groupDir, projectName } = projectManager.ensureGroupDefault(chatId);
@@ -289,7 +296,7 @@ async function handleCommand(
       let projectDir: string;
       let activeProject: string;
       if (ctx.chatType === 'group') {
-        const resolved = resolveGroupProject(ctx.chatId, ctx.threadId, db, projectManager);
+        const resolved = await resolveGroupProject(ctx.chatId, ctx.threadId, db, projectManager);
         projectDir = resolved.projectPath;
         activeProject = resolved.projectName;
       } else {
@@ -489,7 +496,7 @@ async function handleCommand(
             await reply('只有群管理员或话题发起者可以命名会话');
             return;
           }
-          const groupProject = resolveGroupProject(ctx.chatId, ctx.threadId, db, projectManager);
+          const groupProject = await resolveGroupProject(ctx.chatId, ctx.threadId, db, projectManager);
           const session = sessionManager.getOrCreateGroup(ctx.chatId, ctx.threadId, groupProject.projectName);
           sessionId = session.claude_session_id;
         } else {
@@ -520,7 +527,7 @@ async function handleCommand(
             await reply('只有群管理员或话题发起者可以重置会话');
             return;
           }
-          const groupProject = resolveGroupProject(ctx.chatId, ctx.threadId, db, projectManager);
+          const groupProject = await resolveGroupProject(ctx.chatId, ctx.threadId, db, projectManager);
           sessionManager.resetGroup(ctx.chatId, ctx.threadId, groupProject.projectName);
           await reply('已创建新会话，对话上下文已清空。');
           return;
@@ -706,7 +713,7 @@ async function handleClaudeTask(
 
   if (ctx.chatType === 'group') {
     // Group: shared session keyed by chatId
-    const resolved = resolveGroupProject(ctx.chatId, ctx.threadId, db, projectManager);
+    const resolved = await resolveGroupProject(ctx.chatId, ctx.threadId, db, projectManager);
     projectPath = resolved.projectPath;
     projectName = resolved.projectName;
     session = sessionManager.getOrCreateGroup(ctx.chatId, ctx.threadId, projectName);
