@@ -84,6 +84,7 @@ export async function dispatch(
 ): Promise<void> {
   db.upsertUser(ctx.senderId, ctx.senderName);
   const threadId = ctx.threadId ?? undefined;
+  const replyMsgId = threadId ? ctx.messageId : undefined;
 
   const cmd = parseCommand(ctx.text);
   if (cmd) {
@@ -92,7 +93,7 @@ export async function dispatch(
   }
 
   if (!['text', 'image', 'file', 'post'].includes(ctx.messageType)) {
-    await sendText(ctx.chatId, '暂不支持该消息类型，请发送文字、图片或文件。', threadId);
+    await sendText(ctx.chatId, '暂不支持该消息类型，请发送文字、图片或文件。', threadId, replyMsgId);
     return;
   }
 
@@ -282,7 +283,7 @@ async function handleCommand(
     case 'file': {
       const filePath = cmd.args.join(' ');
       if (!filePath) {
-        await sendText(ctx.chatId, '用法: /file <文件路径>', threadId);
+        await sendText(ctx.chatId, '用法: /file <文件路径>', threadId, replyMsgId);
         return;
       }
       let projectDir: string;
@@ -297,7 +298,7 @@ async function handleCommand(
         activeProject = getCurrentProjectName(ctx, db) || 'My Workspace';
       }
       if (!hasAccess(ctx.senderId, activeProject, config.workspaceDir, config)) {
-        await sendText(ctx.chatId, '没有权限访问当前项目的文件', threadId);
+        await sendText(ctx.chatId, '没有权限访问当前项目的文件', threadId, replyMsgId);
         return;
       }
       const fullPath = resolve(projectDir, filePath);
@@ -306,19 +307,19 @@ async function handleCommand(
       const realProjectDir = realpathSync(projectDir);
       let realFullPath: string;
       try { realFullPath = realpathSync(fullPath); }
-      catch { await sendText(ctx.chatId, `文件不存在: ${filePath}`, threadId); return; }
+      catch { await sendText(ctx.chatId, `文件不存在: ${filePath}`, threadId, replyMsgId); return; }
       if (!realFullPath.startsWith(realProjectDir + sep)) {
-        await sendText(ctx.chatId, '路径不合法：不能访问项目目录以外的文件', threadId);
+        await sendText(ctx.chatId, '路径不合法：不能访问项目目录以外的文件', threadId, replyMsgId);
         return;
       }
       const stats = statSync(fullPath);
       if (stats.size > 1024 * 1024) {
-        await sendText(ctx.chatId, `文件过大 (${(stats.size / 1024 / 1024).toFixed(1)}MB)，上限 1MB。后续将支持通过飞书文档查看。`, threadId);
+        await sendText(ctx.chatId, `文件过大 (${(stats.size / 1024 / 1024).toFixed(1)}MB)，上限 1MB。后续将支持通过飞书文档查看。`, threadId, replyMsgId);
         return;
       }
       const fileName = basename(fullPath);
       const fileKey = await uploadFile(fullPath, fileName);
-      await sendFile(ctx.chatId, fileKey, threadId);
+      await sendFile(ctx.chatId, fileKey, threadId, replyMsgId);
       return;
     }
     case 'auth': {
@@ -329,7 +330,7 @@ async function handleCommand(
         const scopes = 'docx:document:create docx:document:readonly docx:document:write_only';
         const deviceAuth = await requestDeviceAuthorization(config.feishu.appId, config.feishu.appSecret, scopes);
         const card = buildOAuthCard(deviceAuth.verificationUriComplete, deviceAuth.userCode);
-        const messageId = await sendCard(ctx.chatId, card, threadId);
+        const messageId = await sendCard(ctx.chatId, card, threadId, replyMsgId);
 
         // Poll in background (fire-and-forget)
         pollDeviceToken({
@@ -691,9 +692,10 @@ async function handleClaudeTask(
   sessionManager: SessionManager, projectManager: ProjectManager,
 ): Promise<void> {
   const threadId = ctx.threadId ?? undefined;
+  const replyMsgId = threadId ? ctx.messageId : undefined;
   const existing = registry.getByUserId(ctx.senderId);
   if (existing) {
-    await sendText(ctx.chatId, '上一个任务还在执行中，请等待完成或发送 /cancel 取消。', threadId);
+    await sendText(ctx.chatId, '上一个任务还在执行中，请等待完成或发送 /cancel 取消。', threadId, replyMsgId);
     return;
   }
 
@@ -720,13 +722,13 @@ async function handleClaudeTask(
       try {
         ({ projectName, projectPath } = resolveProjectPath(ctx.senderId, db, projectManager));
       } catch (e: any) {
-        await sendText(ctx.chatId, e.message, threadId);
+        await sendText(ctx.chatId, e.message, threadId, replyMsgId);
         return;
       }
     }
 
     if (!hasAccess(ctx.senderId, projectName, config.workspaceDir, config)) {
-      await sendText(ctx.chatId, '没有权限访问当前项目，请使用 /project use 切换到有权限的项目', threadId);
+      await sendText(ctx.chatId, '没有权限访问当前项目，请使用 /project use 切换到有权限的项目', threadId, replyMsgId);
       return;
     }
 
@@ -821,7 +823,7 @@ async function handleClaudeTask(
             confirmMessageId = await sendCard(ctx.chatId, confirmCard, threadId, confirmReplyMsgId);
             if (!confirmMessageId) {
               // sendCard failed — auto-deny, notify user
-              await sendText(ctx.chatId, '⚠️ 确认卡片发送失败，操作已自动跳过', threadId);
+              await sendText(ctx.chatId, '⚠️ 确认卡片发送失败，操作已自动跳过', threadId, replyMsgId);
               resolve(false);
               return false;
             }

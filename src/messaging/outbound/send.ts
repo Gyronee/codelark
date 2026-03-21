@@ -71,16 +71,25 @@ export async function uploadFile(filePath: string, fileName: string): Promise<st
   return (response as any)?.data?.file_key ?? (response as any)?.file_key;
 }
 
-export async function sendFile(chatId: string, fileKey: string, threadId?: string): Promise<void> {
-  await client.im.v1.message.create({
-    params: { receive_id_type: 'chat_id' },
-    data: {
-      receive_id: chatId,
-      msg_type: 'file' as any,
-      content: JSON.stringify({ file_key: fileKey }),
-      ...(threadId ? { root_id: threadId } : {}),
-    } as any,
-  });
+export async function sendFile(chatId: string, fileKey: string, threadId?: string, replyToMessageId?: string): Promise<void> {
+  if (replyToMessageId) {
+    await client.im.v1.message.reply({
+      path: { message_id: replyToMessageId },
+      data: {
+        msg_type: 'file' as any,
+        content: JSON.stringify({ file_key: fileKey }),
+      } as any,
+    });
+  } else {
+    await client.im.v1.message.create({
+      params: { receive_id_type: 'chat_id' },
+      data: {
+        receive_id: chatId,
+        msg_type: 'file' as any,
+        content: JSON.stringify({ file_key: fileKey }),
+      } as any,
+    });
+  }
 }
 
 export async function sendCard(chatId: string, card: object, threadId?: string, replyToMessageId?: string): Promise<string | null> {
