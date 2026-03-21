@@ -97,7 +97,9 @@ async function handleCommand(
 ): Promise<void> {
   if (!cmd) return;
   const threadId = ctx.threadId ?? undefined;
-  const reply = (text: string) => sendText(ctx.chatId, text, threadId);
+  // In threads: reply to user's message so response stays in the thread
+  const replyMsgId = threadId ? ctx.messageId : undefined;
+  const reply = (text: string) => sendText(ctx.chatId, text, threadId, replyMsgId);
 
   switch (cmd.type) {
     case 'help': {
@@ -148,7 +150,7 @@ async function handleCommand(
       await sendCard(ctx.chatId, {
         header: { title: { tag: 'plain_text' as const, content: '📋 帮助' }, template: 'blue' as const },
         elements: [{ tag: 'markdown' as const, content: lines.join('\n') }],
-      }, threadId);
+      }, threadId, replyMsgId);
       break;
     }
     case 'whoami':
@@ -229,10 +231,10 @@ async function handleCommand(
           await sendCard(ctx.chatId, {
             header: { title: { tag: 'plain_text' as const, content: '📋 项目列表' }, template: 'blue' as const },
             elements: [{ tag: 'markdown' as const, content: lines.join('\n\n') }],
-          }, threadId);
+          }, threadId, replyMsgId);
         }
       } else {
-        await handleProjectCommand(cmd, ctx, config, db, sessionManager, projectManager, reply, threadId);
+        await handleProjectCommand(cmd, ctx, config, db, sessionManager, projectManager, reply, threadId, replyMsgId);
       }
       break;
     }
@@ -376,7 +378,7 @@ async function handleCommand(
         await sendCard(ctx.chatId, {
           header: { title: { tag: 'plain_text', content: headerTitle }, template: 'blue' },
           elements: [{ tag: 'markdown', content: lines.join('\n\n') }],
-        }, threadId);
+        }, threadId, replyMsgId);
         return;
       }
 
@@ -414,7 +416,7 @@ async function handleCommand(
         await sendCard(ctx.chatId, {
           header: { title: { tag: 'plain_text', content: '🔄 已恢复会话' }, template: 'green' },
           elements: [{ tag: 'markdown', content: lines.join('\n') }],
-        }, threadId);
+        }, threadId, replyMsgId);
         return;
       }
 
@@ -486,6 +488,7 @@ async function handleProjectCommand(
   projectManager: ProjectManager,
   reply: (text: string) => Promise<void>,
   threadId?: string,
+  replyMsgId?: string,
 ): Promise<void> {
   const user = db.getUser(ctx.senderId);
   switch (cmd.action) {
@@ -555,7 +558,7 @@ async function handleProjectCommand(
       await sendCard(ctx.chatId, {
         header: { title: { tag: 'plain_text', content: `📁 ${name} · ${localSessions.length} 个会话` }, template: 'blue' },
         elements: [{ tag: 'markdown', content: lines.join('\n') }],
-      }, threadId);
+      }, threadId, replyMsgId);
       break;
     }
     case 'create': {

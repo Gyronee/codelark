@@ -32,8 +32,8 @@ describe('parseCommand', () => {
     });
   });
 
-  it('parses /reset', () => {
-    expect(parseCommand('/reset')).toEqual({ type: 'reset', action: null, args: [] });
+  it('/reset returns null (removed command)', () => {
+    expect(parseCommand('/reset')).toBeNull();
   });
 
   it('parses /cancel', () => {

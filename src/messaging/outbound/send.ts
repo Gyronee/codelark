@@ -24,17 +24,27 @@ export function startWebSocket(dispatcher: Lark.EventDispatcher): void {
   logger.info('Feishu WebSocket client started');
 }
 
-export async function sendText(chatId: string, text: string, threadId?: string): Promise<void> {
+export async function sendText(chatId: string, text: string, threadId?: string, replyToMessageId?: string): Promise<void> {
   try {
-    await client.im.v1.message.create({
-      params: { receive_id_type: 'chat_id' },
-      data: {
-        receive_id: chatId,
-        content: JSON.stringify({ text }),
-        msg_type: 'text' as any,
-        ...(threadId ? { root_id: threadId } : {}),
-      } as any,
-    });
+    if (replyToMessageId) {
+      // Reply to a specific message (stays in thread)
+      await client.im.v1.message.reply({
+        path: { message_id: replyToMessageId },
+        data: {
+          content: JSON.stringify({ text }),
+          msg_type: 'text' as any,
+        } as any,
+      });
+    } else {
+      await client.im.v1.message.create({
+        params: { receive_id_type: 'chat_id' },
+        data: {
+          receive_id: chatId,
+          content: JSON.stringify({ text }),
+          msg_type: 'text' as any,
+        } as any,
+      });
+    }
   } catch (err) {
     logger.error({ err, chatId }, 'Failed to send text');
   }
@@ -73,15 +83,24 @@ export async function sendFile(chatId: string, fileKey: string, threadId?: strin
   });
 }
 
-export async function sendCard(chatId: string, card: object, threadId?: string): Promise<string | null> {
+export async function sendCard(chatId: string, card: object, threadId?: string, replyToMessageId?: string): Promise<string | null> {
   try {
+    if (replyToMessageId) {
+      const resp = await client.im.v1.message.reply({
+        path: { message_id: replyToMessageId },
+        data: {
+          content: JSON.stringify(card),
+          msg_type: 'interactive' as any,
+        } as any,
+      });
+      return resp?.data?.message_id || null;
+    }
     const resp = await client.im.v1.message.create({
       params: { receive_id_type: 'chat_id' },
       data: {
         receive_id: chatId,
         content: JSON.stringify(card),
         msg_type: 'interactive' as any,
-        ...(threadId ? { root_id: threadId } : {}),
       } as any,
     });
     return resp?.data?.message_id || null;
