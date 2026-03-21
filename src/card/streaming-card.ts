@@ -13,6 +13,8 @@ type Phase = 'idle' | 'waiting' | 'creating' | 'streaming' | 'completed' | 'abor
 const TERMINAL: Phase[] = ['completed', 'aborted', 'error', 'creation_failed'];
 
 export const STREAMING_ELEMENT_ID = 'streaming_content';
+const THINKING_ELEMENT_ID = 'thinking_status';
+const TOOL_STATUS_ELEMENT_ID = 'tool_status';
 const CARDKIT_THROTTLE_MS = 100;
 const IM_THROTTLE_MS = 1500;
 
@@ -21,12 +23,14 @@ function buildStreamingThinkingCard(_mentionTarget?: MentionTarget | null): obje
   // Note: CardKit 2.0 streaming cards don't support <at> in initial creation.
   // Mention is added in the final card (done/error/cancelled) via CardBuilder.
   const elements: any[] = [];
+  elements.push({ tag: 'markdown', content: '', text_align: 'left', element_id: THINKING_ELEMENT_ID });
+  elements.push({ tag: 'markdown', content: '', text_align: 'left', element_id: TOOL_STATUS_ELEMENT_ID });
   elements.push({ tag: 'markdown', content: '', text_align: 'left', element_id: STREAMING_ELEMENT_ID });
   return {
     schema: '2.0',
     config: {
       streaming_mode: true,
-      summary: { content: 'Thinking...' },
+      summary: { content: 'Working...' },
     },
     body: { elements },
   };
@@ -125,6 +129,18 @@ export class StreamingCard {
       this.phase = 'creation_failed';
       logger.warn('Card creation failed entirely');
     }
+  }
+
+  async updateThinking(content: string): Promise<void> {
+    if (!this.cardKitCardId || this.isTerminal) return;
+    this.cardKitSequence++;
+    await streamCardContent(this.cardKitCardId, THINKING_ELEMENT_ID, content, this.cardKitSequence);
+  }
+
+  async updateToolStatus(content: string): Promise<void> {
+    if (!this.cardKitCardId || this.isTerminal) return;
+    this.cardKitSequence++;
+    await streamCardContent(this.cardKitCardId, TOOL_STATUS_ELEMENT_ID, content, this.cardKitSequence);
   }
 
   /** Schedule streaming text — creates card on first call */
