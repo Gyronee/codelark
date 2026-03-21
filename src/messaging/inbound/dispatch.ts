@@ -234,19 +234,19 @@ async function handleCommand(
           await reply('没有发现本地 Claude Code 会话。');
           return;
         }
-        const lines = ['📋 **本地 Claude Code 会话**\n'];
+        const lines: string[] = [];
         for (let i = 0; i < sessions.length; i++) {
           const s = sessions[i];
           const ago = formatTimeAgo(s.lastModified);
           const status = s.isActive ? ' · 🔒 使用中' : '';
           const title = s.summary !== s.sessionId.slice(0, 8) ? `**${s.summary}**` : '_(未命名)_';
-          lines.push(`${i + 1}. ${title}${status}`);
-          lines.push(`    📁 ${s.projectName} · 🕐 ${ago} · ID: \`${s.sessionId.slice(0, 8)}\``);
-          if (i < sessions.length - 1) lines.push('');
+          lines.push(`${i + 1}. ${title}${status}\n    📁 ${s.projectName} · 🕐 ${ago} · ID: \`${s.sessionId.slice(0, 8)}\``);
         }
-        lines.push('\n---');
-        lines.push('输入 `/session resume <ID>` 恢复会话');
-        await reply(lines.join('\n'));
+        lines.push('---\n输入 `/session resume <ID>` 恢复会话');
+        await sendCard(ctx.chatId, {
+          header: { title: { tag: 'plain_text', content: '📋 本地 Claude Code 会话' }, template: 'blue' },
+          elements: [{ tag: 'markdown', content: lines.join('\n\n') }],
+        }, threadId);
         return;
       }
 
@@ -265,21 +265,22 @@ async function handleCommand(
 
         const messages = getRecentMessages(session.sessionId, 5);
         const lines = [
-          `🔄 **已恢复会话**`,
           `**${session.summary}**`,
           `📁 ${session.projectName} · 🕐 ${formatTimeAgo(session.lastModified)}`,
         ];
         if (messages.length > 0) {
-          lines.push('', '---', '', '**最近对话：**');
+          lines.push('---', '**最近对话：**');
           for (const m of messages) {
             const icon = m.role === 'user' ? '👤' : '🤖';
             const text = m.text.slice(0, 120) + (m.text.length > 120 ? '...' : '');
             lines.push(`${icon} ${text}`);
           }
         }
-        lines.push('', '---', '会话已恢复，直接发消息继续对话。');
-        lines.push('输入 `/session exit` 退出恢复模式。');
-        await reply(lines.join('\n'));
+        lines.push('---', '会话已恢复，直接发消息继续对话。\n输入 `/session exit` 退出恢复模式。');
+        await sendCard(ctx.chatId, {
+          header: { title: { tag: 'plain_text', content: '🔄 已恢复会话' }, template: 'green' },
+          elements: [{ tag: 'markdown', content: lines.join('\n') }],
+        }, threadId);
         return;
       }
 
