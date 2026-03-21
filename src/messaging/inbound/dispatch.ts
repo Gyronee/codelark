@@ -154,14 +154,7 @@ async function handleCommand(
       await reply(lines.join('\n'));
       break;
     }
-    case 'reset': {
-      // Legacy alias for /session new
-      const user = db.getUser(ctx.senderId);
-      const project = user?.active_project || DEFAULT_PROJECT_LABEL;
-      sessionManager.reset(ctx.senderId, ctx.threadId, project);
-      await reply('已创建新会话。提示: 请使用 /session new 代替 /reset');
-      break;
-    }
+    // /reset removed — use /session new
     case 'cancel':
       await reply('没有正在执行的任务。');
       break;
