@@ -234,16 +234,18 @@ async function handleCommand(
           await reply('没有发现本地 Claude Code 会话。');
           return;
         }
-        const lines = ['📋 **最近的 Claude Code 会话**\n'];
+        const lines = ['📋 **本地 Claude Code 会话**\n'];
         for (let i = 0; i < sessions.length; i++) {
           const s = sessions[i];
           const ago = formatTimeAgo(s.lastModified);
-          const active = s.isActive ? '  🔒 使用中' : '';
-          lines.push(`${i + 1}. 📁 ${s.projectName} · ${ago}${active}`);
-          lines.push(`   "${s.summary}"`);
-          lines.push(`   ID: ${s.sessionId.slice(0, 8)}\n`);
+          const status = s.isActive ? ' · 🔒 使用中' : '';
+          const title = s.summary !== s.sessionId.slice(0, 8) ? `**${s.summary}**` : '_(未命名)_';
+          lines.push(`${i + 1}. ${title}${status}`);
+          lines.push(`    📁 ${s.projectName} · 🕐 ${ago} · ID: \`${s.sessionId.slice(0, 8)}\``);
+          if (i < sessions.length - 1) lines.push('');
         }
-        lines.push('使用 /session resume <ID> 恢复会话');
+        lines.push('\n---');
+        lines.push('输入 `/session resume <ID>` 恢复会话');
         await reply(lines.join('\n'));
         return;
       }
@@ -262,16 +264,21 @@ async function handleCommand(
         db.setResumedSession(ctx.senderId, session.sessionId, session.cwd);
 
         const messages = getRecentMessages(session.sessionId, 5);
-        const lines = [`🔄 **恢复会话:** "${session.summary}"\n📁 ${session.projectName} · ${formatTimeAgo(session.lastModified)}\n`];
+        const lines = [
+          `🔄 **已恢复会话**`,
+          `**${session.summary}**`,
+          `📁 ${session.projectName} · 🕐 ${formatTimeAgo(session.lastModified)}`,
+        ];
         if (messages.length > 0) {
-          lines.push('**最近对话：**');
+          lines.push('', '---', '', '**最近对话：**');
           for (const m of messages) {
-            const prefix = m.role === 'user' ? '👤 你' : '🤖 Claude';
-            lines.push(`${prefix}: ${m.text.slice(0, 100)}${m.text.length > 100 ? '...' : ''}`);
+            const icon = m.role === 'user' ? '👤' : '🤖';
+            const text = m.text.slice(0, 120) + (m.text.length > 120 ? '...' : '');
+            lines.push(`${icon} ${text}`);
           }
-          lines.push('');
         }
-        lines.push('会话已恢复，可以继续对话。发送 /session exit 可退出恢复模式。');
+        lines.push('', '---', '会话已恢复，直接发消息继续对话。');
+        lines.push('输入 `/session exit` 退出恢复模式。');
         await reply(lines.join('\n'));
         return;
       }
