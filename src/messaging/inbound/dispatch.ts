@@ -425,8 +425,32 @@ async function handleProjectCommand(
         await reply('没有权限访问该项目');
         return;
       }
-      try { projectManager.resolve(name); db.setActiveProject(ctx.senderId, name); await reply(`已切换到项目: ${name}`); }
-      catch (e: any) { await reply(e.message); }
+      // Try bot project first
+      try {
+        projectManager.resolve(name);
+        db.setActiveProject(ctx.senderId, name);
+        await reply(`已切换到项目: ${name}`);
+        break;
+      } catch {
+        // Not a bot project — check local CLI projects
+      }
+      // Check local CLI projects
+      const { listLocalSessions } = await import('../../session/local-sessions.js');
+      const localSessions = listLocalSessions(50)
+        .filter(s => s.projectName === name && hasAccess(ctx.senderId, s.projectName, config.workspaceDir, config));
+      if (localSessions.length === 0) {
+        await reply(`项目 "${name}" 未找到`);
+        break;
+      }
+      // Show sessions for this project, guide user to resume
+      const lines = [`📁 **${name}** 是本地 CLI 项目，有 ${localSessions.length} 个会话：\n`];
+      for (const s of localSessions) {
+        const title = s.hasCustomTitle ? s.summary : '_(未命名)_';
+        const ago = formatTimeAgo(s.lastModified);
+        lines.push(`• ${title} · 🕐 ${ago} · ID: ${s.sessionId.slice(0, 8)}`);
+      }
+      lines.push('\n使用 /session resume <ID> 恢复会话');
+      await reply(lines.join('\n'));
       break;
     }
     case 'create': {
