@@ -17,6 +17,7 @@ export interface SessionRow {
   topic_id: string | null;
   project_name: string;
   claude_session_id: string | null;
+  model: string | null;
   last_active_at: string | null;
   created_at: string;
 }
@@ -117,6 +118,12 @@ export class Database {
     } catch {
       // column already exists
     }
+
+    try {
+      this.db.exec('ALTER TABLE sessions ADD COLUMN model TEXT;');
+    } catch {
+      // column already exists
+    }
   }
 
   upsertUser(feishuUserId: string, name: string | null): void {
@@ -189,6 +196,11 @@ export class Database {
   touchSession(sessionId: string): void {
     this.db.prepare('UPDATE sessions SET last_active_at = CURRENT_TIMESTAMP WHERE id = ?')
       .run(sessionId);
+  }
+
+  setSessionModel(sessionId: string, model: string): void {
+    this.db.prepare('UPDATE sessions SET model = ? WHERE id = ?')
+      .run(model, sessionId);
   }
 
   resetSession(sessionId: string): void {

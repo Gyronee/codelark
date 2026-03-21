@@ -116,6 +116,27 @@ describe('Database', () => {
       const session = db.findSession('ou_123', null, 'my-app');
       expect(session?.claude_session_id).toBeNull();
     });
+
+    it('setSessionModel stores model on session', () => {
+      const id = db.createSession('ou_123', null, 'my-app');
+      db.setSessionModel(id, 'claude-sonnet-4-6');
+      const session = db.findSession('ou_123', null, 'my-app');
+      expect(session?.model).toBe('claude-sonnet-4-6');
+    });
+
+    it('setSessionModel overwrites previous model', () => {
+      const id = db.createSession('ou_123', null, 'my-app');
+      db.setSessionModel(id, 'claude-sonnet-4-6');
+      db.setSessionModel(id, 'claude-opus-4-6');
+      const session = db.findSession('ou_123', null, 'my-app');
+      expect(session?.model).toBe('claude-opus-4-6');
+    });
+
+    it('new session has null model by default', () => {
+      db.createSession('ou_123', null, 'my-app');
+      const session = db.findSession('ou_123', null, 'my-app');
+      expect(session?.model).toBeNull();
+    });
   });
 
   describe('oauth tokens', () => {

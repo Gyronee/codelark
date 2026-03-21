@@ -14,7 +14,7 @@ import { requestPermission } from './card-actions.js';
 import * as registry from '../../channel/active-registry.js';
 import { buildQueueKey } from '../../channel/chat-queue.js';
 import { getRecentHistory, formatHistoryContext, getActiveUsers } from '../../channel/chat-history.js';
-import { getUserModel, setUserModel, listModels } from '../../channel/user-model.js';
+import { resolveModelAlias, listModels } from '../../channel/model-config.js';
 import { downloadImage, downloadFile } from './media.js';
 import { hasAccess, canGrant, grantAccess, revokeAccess, getProjectAccess, isAdmin } from '../../auth/access.js';
 import { isGroupAdmin } from '../../auth/group-admin.js';
@@ -275,13 +275,23 @@ async function handleCommand(
       break;
     }
     case 'model': {
-      if (!cmd.action) {
-        const current = getUserModel(ctx.senderId);
-        const models = listModels();
-        await reply(`当前模型: ${current}\n\n可用模型:\n${models.map(m => `• ${m}`).join('\n')}\n\n用法: /model <名称>\n快捷: /model opus, /model sonnet, /model haiku`);
+      // Resolve current session (group vs P2P)
+      let modelSession: import('../../session/db.js').SessionRow;
+      if (ctx.chatType === 'group') {
+        const resolved = await resolveGroupProject(ctx.chatId, ctx.threadId, db, projectManager);
+        modelSession = sessionManager.getOrCreateGroup(ctx.chatId, ctx.threadId, resolved.projectName);
       } else {
-        const resolved = setUserModel(ctx.senderId, cmd.action);
+        const { projectName } = resolveProjectPath(ctx.senderId, db, projectManager);
+        modelSession = sessionManager.getOrCreate(ctx.senderId, ctx.threadId, projectName);
+      }
+
+      if (!cmd.action) {
+        const current = modelSession.model || process.env.CLAUDE_MODEL || 'claude-opus-4-6';
+        await reply(`当前模型: ${current}\n可用: ${listModels().join(', ')}\n快捷: opus, sonnet, haiku`);
+      } else {
+        const resolved = resolveModelAlias(cmd.action);
         if (resolved) {
+          db.setSessionModel(modelSession.id, resolved);
           await reply(`模型已切换为: ${resolved}`);
         } else {
           await reply(`无效模型: ${cmd.action}\n可用: ${listModels().join(', ')}\n快捷: opus, sonnet, haiku`);
@@ -836,8 +846,6 @@ async function handleClaudeTask(
     }
   }
 
-  const userModel = getUserModel(ctx.senderId);
-
   await executeClaudeTask(prompt, projectPath, effectiveSessionId, abortController, {
     onText: (fullText) => { void card.scheduleStreamText(fullText); },
     onToolStart: (tool, detail) => {
@@ -933,7 +941,7 @@ async function handleClaudeTask(
         else await card.error(CardBuilder.error(projectName, error, Date.now() - startTime, mentionTarget));
       }
     },
-  }, userModel, ctx.senderId, db);
+  }, session.model || undefined, ctx.senderId, db);
 
   // Cleanup temp images (delay to avoid race with Claude reading them)
   if (imagePaths.length > 0) {
