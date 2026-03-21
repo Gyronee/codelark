@@ -384,12 +384,16 @@ async function handleCommand(
 
       if (cmd.action === 'list' || !cmd.action) {
         const currentProject = getCurrentProjectName(ctx, db) || null;
+        // Group non-topic: no CLI sessions to show
+        if (ctx.chatType === 'group' && !ctx.threadId && !currentProject) {
+          await reply('群默认目录没有可恢复的会话。请在话题中使用 /session list');
+          return;
+        }
         let sessions = listLocalSessions(50);
         if (config.sessionTitledOnly) {
           sessions = sessions.filter(s => s.hasCustomTitle);
         }
         sessions = sessions.filter(s => hasAccess(ctx.senderId, s.projectName, config.workspaceDir, config));
-        // Filter by current project if set
         if (currentProject) {
           sessions = sessions.filter(s => s.projectName === currentProject);
         }
