@@ -35,6 +35,25 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
  * Read the last N bytes of a file. Returns array of complete lines
  * (first line discarded as it may be truncated).
  */
+function readHead(filePath: string, bytes: number): string[] {
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    const stat = fs.fstatSync(fd);
+    const readBytes = Math.min(bytes, stat.size);
+    const buf = Buffer.alloc(readBytes);
+    fs.readSync(fd, buf, 0, readBytes, 0);
+    const text = buf.toString('utf-8');
+    const lines = text.split('\n').filter(l => l.trim().length > 0);
+    // Discard last line if we didn't read the entire file (may be truncated)
+    if (readBytes < stat.size && lines.length > 0) {
+      lines.pop();
+    }
+    return lines;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 function readTail(filePath: string, bytes: number): string[] {
   const fd = fs.openSync(filePath, 'r');
   try {
@@ -93,27 +112,30 @@ function extractSessionIdFromTail(lines: string[]): string | null {
 /**
  * Extract a summary from the last user message in the tail lines.
  */
-function extractSummary(lines: string[], sessionId: string): string {
-  let customTitle = '';
-  let lastUserText = '';
-  for (const line of lines) {
-    try {
-      const obj = JSON.parse(line);
-      // Prefer customTitle (set via /rename in CLI)
-      if (obj.customTitle && typeof obj.customTitle === 'string') {
-        customTitle = obj.customTitle;
-      }
-      if (obj.isSidechain) continue;
-      if (obj.type === 'user' && obj.message) {
-        const content = obj.message.content;
-        const text = extractTextFromContent(content);
-        if (text) lastUserText = text;
-      }
-    } catch {
-      // skip
+function extractSummary(headLines: string[], tailLines: string[], sessionId: string): string {
+  // Search head first for customTitle (more likely near start of file)
+  for (const lines of [headLines, tailLines]) {
+    for (const line of lines) {
+      try {
+        const obj = JSON.parse(line);
+        if (obj.customTitle && typeof obj.customTitle === 'string') {
+          return obj.customTitle;
+        }
+      } catch { /* skip */ }
     }
   }
-  if (customTitle) return customTitle;
+  // Fallback: last user message from tail
+  let lastUserText = '';
+  for (const line of tailLines) {
+    try {
+      const obj = JSON.parse(line);
+      if (obj.isSidechain) continue;
+      if (obj.type === 'user' && obj.message) {
+        const text = extractTextFromContent(obj.message.content);
+        if (text) lastUserText = text;
+      }
+    } catch { /* skip */ }
+  }
   if (lastUserText) {
     return lastUserText.length > 80 ? lastUserText.slice(0, 80) + '...' : lastUserText;
   }
@@ -224,8 +246,13 @@ export function listLocalSessions(limit = 15): LocalSession[] {
           const cwd = extractCwdFromTail(lines);
           if (!cwd) continue;
 
+          // Filter out bot-created sessions (cwd contains /users/ou_)
+          if (/\/users\/ou_/.test(cwd)) continue;
+
           const sessionId = extractSessionIdFromTail(lines) || baseName;
-          const summary = extractSummary(lines, sessionId);
+          // Read head for customTitle (tail may not have it in large files)
+          const headLines = readHead(filePath, 4096);
+          const summary = extractSummary(headLines, lines, sessionId);
           const activeInfo = activeSessions.get(sessionId);
 
           sessions.push({
