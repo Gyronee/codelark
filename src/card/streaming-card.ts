@@ -5,7 +5,7 @@ import {
   streamCardContent, updateCardKitCard, setCardStreamingMode,
   addTypingReaction, removeTypingReaction,
 } from '../messaging/outbound/send.js';
-import { CardBuilder } from './builder.js';
+import { CardBuilder, type MentionTarget } from './builder.js';
 import { optimizeMarkdownStyle } from './markdown-style.js';
 import { logger } from '../logger.js';
 
@@ -17,23 +17,19 @@ const CARDKIT_THROTTLE_MS = 100;
 const IM_THROTTLE_MS = 1500;
 
 /** CardKit 2.0 initial card with streaming_mode and loading icon */
-function buildStreamingThinkingCard(): object {
+function buildStreamingThinkingCard(mentionTarget?: MentionTarget | null): object {
+  const elements: any[] = [];
+  if (mentionTarget) {
+    elements.push({ tag: 'markdown', content: `<at id=${mentionTarget.userId}></at>`, text_align: 'left' });
+  }
+  elements.push({ tag: 'markdown', content: '', text_align: 'left', element_id: STREAMING_ELEMENT_ID });
   return {
     schema: '2.0',
     config: {
       streaming_mode: true,
       summary: { content: 'Thinking...' },
     },
-    body: {
-      elements: [
-        {
-          tag: 'markdown',
-          content: '',
-          text_align: 'left',
-          element_id: STREAMING_ELEMENT_ID,
-        },
-      ],
-    },
+    body: { elements },
   };
 }
 
@@ -49,11 +45,13 @@ export class StreamingCard {
   private userMessageId: string | null;
   private typingReactionId: string | null = null;
   private lastContent: string = '';
+  private mentionTarget: MentionTarget | null;
 
-  constructor(chatId: string, threadId: string | null, userMessageId: string | null) {
+  constructor(chatId: string, threadId: string | null, userMessageId: string | null, mentionTarget?: MentionTarget) {
     this.chatId = chatId;
     this.threadId = threadId;
     this.userMessageId = userMessageId;
+    this.mentionTarget = mentionTarget ?? null;
     this.flush = new FlushController(
       async (content) => {
         if (this.phase !== 'streaming') return;
@@ -92,7 +90,7 @@ export class StreamingCard {
     const epoch = this.createEpoch;
 
     // Try CardKit 2.0 first
-    const cardId = await createCardEntity(buildStreamingThinkingCard());
+    const cardId = await createCardEntity(buildStreamingThinkingCard(this.mentionTarget));
     if (this.createEpoch !== epoch || this.isTerminal) return;
 
     if (cardId) {
@@ -164,7 +162,11 @@ export class StreamingCard {
   async error(card: object) { await this.finalizeCard(card, 'error', false); }
 
   async fallbackText(text: string): Promise<void> {
-    await sendText(this.chatId, text, this.threadId ?? undefined);
+    let content = text;
+    if (this.mentionTarget) {
+      content = `<at user_id="${this.mentionTarget.userId}">${this.mentionTarget.name}</at>\n${content}`;
+    }
+    await sendText(this.chatId, content, this.threadId ?? undefined);
     await this.removeTyping();
   }
 

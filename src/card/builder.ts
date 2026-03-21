@@ -4,6 +4,11 @@ export interface ToolStatus {
   detail: string;
 }
 
+export interface MentionTarget {
+  userId: string;
+  name: string;
+}
+
 interface FeishuCard {
   header?: { title: { tag: string; content: string }; template: string };
   config?: Record<string, unknown>;
@@ -120,8 +125,11 @@ export const CardBuilder = {
     elements.push({ tag: 'action', actions: [{ tag: 'button', text: { tag: 'plain_text', content: 'Cancel' }, type: 'danger', value: { action: 'cancel_task' } }] });
     return { header: { title: { tag: 'plain_text', content: `🔧 Working · ${project}` }, template: 'orange' }, elements };
   },
-  done(project: string, text: string, toolCount: number, opts?: { reasoningText?: string; reasoningElapsedMs?: number; elapsedMs?: number }): FeishuCard {
+  done(project: string, text: string, toolCount: number, opts?: { reasoningText?: string; reasoningElapsedMs?: number; elapsedMs?: number; mentionTarget?: MentionTarget }): FeishuCard {
     const elements: unknown[] = [];
+    if (opts?.mentionTarget) {
+      elements.unshift({ tag: 'markdown', content: `<at id=${opts.mentionTarget.userId}></at>` });
+    }
     if (opts?.reasoningText) {
       elements.push(buildReasoningPanel(opts.reasoningText, opts.reasoningElapsedMs));
     }
@@ -136,10 +144,12 @@ export const CardBuilder = {
       elements,
     };
   },
-  error(project: string, msg: string, elapsedMs?: number): FeishuCard {
-    const elements: unknown[] = [
-      { tag: 'markdown', content: sanitizeMarkdown(msg) },
-    ];
+  error(project: string, msg: string, elapsedMs?: number, mentionTarget?: MentionTarget): FeishuCard {
+    const elements: unknown[] = [];
+    if (mentionTarget) {
+      elements.push({ tag: 'markdown', content: `<at id=${mentionTarget.userId}></at>` });
+    }
+    elements.push({ tag: 'markdown', content: sanitizeMarkdown(msg) });
     const elapsed = elapsedMs ? ` · 耗时 ${formatElapsed(elapsedMs)}` : '';
     elements.push({ tag: 'markdown', content: `<font color='red'>出错${elapsed}</font>`, text_size: 'notation' });
     return { config: { wide_screen_mode: true }, elements };
@@ -157,12 +167,15 @@ export const CardBuilder = {
       ],
     };
   },
-  cancelled(project: string): FeishuCard {
+  cancelled(project: string, mentionTarget?: MentionTarget): FeishuCard {
+    const elements: unknown[] = [];
+    if (mentionTarget) {
+      elements.push({ tag: 'markdown', content: `<at id=${mentionTarget.userId}></at>` });
+    }
+    elements.push({ tag: 'markdown', content: `已停止 · ${project}`, text_size: 'notation' });
     return {
       config: { wide_screen_mode: true },
-      elements: [
-        { tag: 'markdown', content: `已停止 · ${project}`, text_size: 'notation' },
-      ],
+      elements,
     };
   },
   status(text: string): FeishuCard {

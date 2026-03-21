@@ -8,12 +8,12 @@ import { resolve, basename, sep } from 'path';
 import { realpathSync, statSync, unlinkSync } from 'fs';
 import { sendText, sendCard, updateCard, uploadFile, sendFile } from '../outbound/send.js';
 import { StreamingCard } from '../../card/streaming-card.js';
-import { CardBuilder, type ToolStatus } from '../../card/builder.js';
+import { CardBuilder, type ToolStatus, type MentionTarget } from '../../card/builder.js';
 import { executeClaudeTask, type ExecutionResult } from '../../claude/executor.js';
 import { requestPermission } from './card-actions.js';
 import * as registry from '../../channel/active-registry.js';
 import { buildQueueKey } from '../../channel/chat-queue.js';
-import { getRecentHistory, formatHistoryContext } from '../../channel/chat-history.js';
+import { getRecentHistory, formatHistoryContext, getActiveUsers } from '../../channel/chat-history.js';
 import { getUserModel, setUserModel, listModels } from '../../channel/user-model.js';
 import { downloadImage, downloadFile } from './media.js';
 import { hasAccess, canGrant, grantAccess, revokeAccess, getProjectAccess, isAdmin } from '../../auth/access.js';
@@ -694,6 +694,23 @@ async function handleProjectCommand(
   }
 }
 
+function replaceMentions(text: string, chatId: string, threadId?: string | null): string {
+  const users = getActiveUsers(chatId, threadId);
+  const nameMap = new Map<string, string | null>();
+  for (const u of users) {
+    if (nameMap.has(u.name)) {
+      nameMap.set(u.name, null); // duplicate — skip
+    } else {
+      nameMap.set(u.name, u.userId);
+    }
+  }
+  return text.replace(/@([\u4e00-\u9fff\w]+)/g, (match, name) => {
+    const userId = nameMap.get(name);
+    if (userId) return `<at user_id="${userId}">${name}</at>`;
+    return match;
+  });
+}
+
 async function handleClaudeTask(
   ctx: MessageContext, config: Config, db: Database,
   sessionManager: SessionManager, projectManager: ProjectManager,
@@ -767,8 +784,12 @@ async function handleClaudeTask(
     }
   }));
 
+  const mentionTarget: MentionTarget | undefined = ctx.chatType === 'group'
+    ? { userId: ctx.senderId, name: ctx.senderName || ctx.senderId }
+    : undefined;
+
   const effectiveSessionId = resumedCliSession || session.claude_session_id;
-  const card = new StreamingCard(ctx.chatId, ctx.threadId, ctx.messageId);
+  const card = new StreamingCard(ctx.chatId, ctx.threadId, ctx.messageId, mentionTarget);
   await card.startTyping(); // Add typing reaction immediately, defer card creation to first token
 
   const abortController = new AbortController();
@@ -804,6 +825,11 @@ async function handleClaudeTask(
     const historyContext = formatHistoryContext(history);
     if (historyContext) {
       prompt = `${historyContext}\n\n---\n\n${prompt}`;
+    }
+    const activeUsers = getActiveUsers(ctx.chatId, ctx.threadId);
+    if (activeUsers.length > 0) {
+      const userList = activeUsers.map(u => u.name).join(', ');
+      prompt = `[可 @mention 的用户: ${userList}]\n如需提及某人，使用 @用户名 格式。\n\n${prompt}`;
     }
   }
 
@@ -876,12 +902,17 @@ async function handleClaudeTask(
       }
       if (result.sessionId) db.updateClaudeSessionId(session.id, result.sessionId);
       db.logTask(session.id, ctx.text, result.text, JSON.stringify(tools.map(t => t.tool)), result.durationMs, 'success');
-      if (card.isTerminal) { await card.fallbackText(CardBuilder.buildFallbackText(result.text)); }
+      let resultText = result.text;
+      if (ctx.chatType === 'group') {
+        resultText = replaceMentions(resultText, ctx.chatId, ctx.threadId);
+      }
+      if (card.isTerminal) { await card.fallbackText(CardBuilder.buildFallbackText(resultText)); }
       else {
-        await card.complete(CardBuilder.done(projectName, result.text, result.toolCount, {
+        await card.complete(CardBuilder.done(projectName, resultText, result.toolCount, {
           reasoningText: result.reasoningText || undefined,
           reasoningElapsedMs: result.reasoningElapsedMs || undefined,
           elapsedMs: result.durationMs,
+          mentionTarget,
         }));
       }
     },
@@ -893,10 +924,10 @@ async function handleClaudeTask(
       }
       db.logTask(session.id, ctx.text, error, null, Date.now() - startTime, 'error');
       if (abortController.signal.aborted) {
-        if (!card.isTerminal) await card.abort(CardBuilder.cancelled(projectName));
+        if (!card.isTerminal) await card.abort(CardBuilder.cancelled(projectName, mentionTarget));
       } else {
         if (card.isTerminal) await card.fallbackText(error);
-        else await card.error(CardBuilder.error(projectName, error, Date.now() - startTime));
+        else await card.error(CardBuilder.error(projectName, error, Date.now() - startTime, mentionTarget));
       }
     },
   }, userModel, ctx.senderId, db);
