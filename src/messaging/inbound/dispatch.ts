@@ -16,6 +16,7 @@ import { buildQueueKey } from '../../channel/chat-queue.js';
 import { getRecentHistory, formatHistoryContext } from '../../channel/chat-history.js';
 import { getUserModel, setUserModel, listModels } from '../../channel/user-model.js';
 import { downloadImage, downloadFile } from './media.js';
+import { hasAccess, canGrant, grantAccess, revokeAccess, getProjectAccess, isAdmin } from '../../auth/access.js';
 import { logger } from '../../logger.js';
 
 const DEFAULT_PROJECT_LABEL = 'My Workspace';
@@ -132,7 +133,7 @@ async function handleCommand(
       await reply('没有正在执行的任务。');
       break;
     case 'project':
-      await handleProjectCommand(cmd, ctx, db, projectManager, reply);
+      await handleProjectCommand(cmd, ctx, config, db, projectManager, reply);
       break;
     case 'model': {
       if (!cmd.action) {
@@ -156,6 +157,11 @@ async function handleCommand(
         return;
       }
       const { projectPath: projectDir } = resolveProjectPath(ctx.senderId, db, projectManager);
+      const activeProject = db.getUser(ctx.senderId)?.active_project || 'My Workspace';
+      if (!hasAccess(ctx.senderId, activeProject, config.workspaceDir, config)) {
+        await sendText(ctx.chatId, '没有权限访问当前项目的文件', threadId);
+        return;
+      }
       const fullPath = resolve(projectDir, filePath);
 
       // Security: path traversal prevention (resolve symlinks to catch ../.. tricks)
@@ -242,6 +248,7 @@ async function handleCommand(
         if (config.sessionTitledOnly) {
           sessions = sessions.filter(s => s.hasCustomTitle);
         }
+        sessions = sessions.filter(s => hasAccess(ctx.senderId, s.projectName, config.workspaceDir, config));
         sessions = sessions.slice(0, 10);
         if (sessions.length === 0) {
           await reply('没有发现本地 Claude Code 会话。');
@@ -269,6 +276,10 @@ async function handleCommand(
 
         const session = findSessionById(idPrefix);
         if (!session) { await reply(`未找到 ID 以 "${idPrefix}" 开头的会话`); return; }
+        if (!hasAccess(ctx.senderId, session.projectName, config.workspaceDir, config)) {
+          await reply(`没有权限访问项目 ${session.projectName}`);
+          return;
+        }
         if (session.isActive) {
           await reply(`该会话正在被本地 CLI 使用中 (PID: ${session.activePid})，请先关闭本地会话。`);
           return;
@@ -317,10 +328,12 @@ async function handleCommand(
 async function handleProjectCommand(
   cmd: NonNullable<ReturnType<typeof parseCommand>>,
   ctx: MessageContext,
+  config: Config,
   db: Database,
   projectManager: ProjectManager,
   reply: (text: string) => Promise<void>,
 ): Promise<void> {
+  const user = db.getUser(ctx.senderId);
   switch (cmd.action) {
     case 'list': {
       const projects = projectManager.list();
@@ -331,6 +344,10 @@ async function handleProjectCommand(
     case 'use': {
       const name = cmd.args[0];
       if (!name) { await reply('用法: /project use <名称>'); return; }
+      if (!hasAccess(ctx.senderId, name, config.workspaceDir, config)) {
+        await reply('没有权限访问该项目');
+        return;
+      }
       try { projectManager.resolve(name); db.setActiveProject(ctx.senderId, name); await reply(`已切换到项目: ${name}`); }
       catch (e: any) { await reply(e.message); }
       break;
@@ -357,6 +374,41 @@ async function handleProjectCommand(
       db.setActiveProject(ctx.senderId, null);
       projectManager.ensureUserDefault(ctx.senderId);
       await reply('已切换到个人目录');
+      break;
+    }
+    case 'grant': {
+      const targetUser = cmd.args[0];
+      if (!targetUser) { await reply('用法: /project grant <用户ID> [项目名]'); return; }
+      const targetProject = cmd.args[1] || user?.active_project;
+      if (!targetProject) { await reply('请先切换到一个项目，或指定项目名'); return; }
+      if (!canGrant(ctx.senderId, targetProject, config.workspaceDir, config)) {
+        await reply('没有权限：只有项目创建者或管理员可以授权'); return;
+      }
+      grantAccess(config.workspaceDir, targetUser, targetProject);
+      await reply(`已授权 ${targetUser} 访问项目 ${targetProject}`);
+      break;
+    }
+    case 'revoke': {
+      const targetUser = cmd.args[0];
+      if (!targetUser) { await reply('用法: /project revoke <用户ID> [项目名]'); return; }
+      const targetProject = cmd.args[1] || user?.active_project;
+      if (!targetProject) { await reply('请先切换到一个项目，或指定项目名'); return; }
+      if (!canGrant(ctx.senderId, targetProject, config.workspaceDir, config)) {
+        await reply('没有权限：只有项目创建者或管理员可以撤销授权'); return;
+      }
+      revokeAccess(config.workspaceDir, targetUser, targetProject);
+      await reply(`已撤销 ${targetUser} 对项目 ${targetProject} 的权限`);
+      break;
+    }
+    case 'access': {
+      const targetProject = cmd.args[0] || user?.active_project;
+      if (!targetProject) { await reply('请先切换到一个项目，或指定项目名'); return; }
+      const users = getProjectAccess(config.workspaceDir, targetProject);
+      if (users.length === 0) {
+        await reply(`项目 ${targetProject} 没有额外授权用户（创建者和管理员始终有权限）`);
+      } else {
+        await reply(`项目 ${targetProject} 的授权用户:\n${users.map(u => '• ' + u).join('\n')}`);
+      }
       break;
     }
     default: await reply(`未知项目命令: ${cmd.action}`);
@@ -391,6 +443,11 @@ async function handleClaudeTask(
       await sendText(ctx.chatId, e.message, threadId);
       return;
     }
+  }
+
+  if (!hasAccess(ctx.senderId, projectName, config.workspaceDir, config)) {
+    await sendText(ctx.chatId, '没有权限访问当前项目，请使用 /project use 切换到有权限的项目', threadId);
+    return;
   }
 
   // Download attached resources (images / files)

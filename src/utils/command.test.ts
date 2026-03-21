@@ -85,4 +85,28 @@ describe('parseCommand', () => {
       type: 'session', action: 'list', args: []
     });
   });
+
+  it('parses /project grant ou_xxx', () => {
+    expect(parseCommand('/project grant ou_xxx')).toEqual({
+      type: 'project', action: 'grant', args: ['ou_xxx']
+    });
+  });
+
+  it('parses /project grant ou_xxx remote-control', () => {
+    expect(parseCommand('/project grant ou_xxx remote-control')).toEqual({
+      type: 'project', action: 'grant', args: ['ou_xxx', 'remote-control']
+    });
+  });
+
+  it('parses /project revoke ou_xxx', () => {
+    expect(parseCommand('/project revoke ou_xxx')).toEqual({
+      type: 'project', action: 'revoke', args: ['ou_xxx']
+    });
+  });
+
+  it('parses /project access', () => {
+    expect(parseCommand('/project access')).toEqual({
+      type: 'project', action: 'access', args: []
+    });
+  });
 });
