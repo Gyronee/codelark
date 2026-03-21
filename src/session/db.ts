@@ -89,6 +89,15 @@ export class Database {
         scope TEXT NOT NULL DEFAULT '',
         granted_at INTEGER NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS thread_bindings (
+        chat_id TEXT NOT NULL,
+        thread_id TEXT NOT NULL,
+        project_name TEXT,
+        creator_user_id TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (chat_id, thread_id)
+      );
     `);
 
     try {
@@ -231,6 +240,34 @@ export class Database {
   deleteToken(feishuUserId: string): void {
     this.db.prepare('DELETE FROM oauth_tokens WHERE feishu_user_id = ?')
       .run(feishuUserId);
+  }
+
+  ensureThreadCreator(chatId: string, threadId: string, creatorUserId: string): void {
+    this.db.prepare(
+      'INSERT OR IGNORE INTO thread_bindings (chat_id, thread_id, creator_user_id) VALUES (?, ?, ?)'
+    ).run(chatId, threadId, creatorUserId);
+  }
+
+  setThreadBinding(chatId: string, threadId: string, projectName: string, boundBy: string): boolean {
+    const existing = this.getThreadBinding(chatId, threadId);
+    if (existing?.projectName) return false; // already bound
+    if (existing) {
+      // Row exists (creator recorded) — update with project name
+      this.db.prepare('UPDATE thread_bindings SET project_name = ? WHERE chat_id = ? AND thread_id = ?')
+        .run(projectName, chatId, threadId);
+    } else {
+      // No row — insert with creator and project
+      this.db.prepare('INSERT INTO thread_bindings (chat_id, thread_id, project_name, creator_user_id) VALUES (?, ?, ?, ?)')
+        .run(chatId, threadId, projectName, boundBy);
+    }
+    return true;
+  }
+
+  getThreadBinding(chatId: string, threadId: string): { projectName: string | null; creatorUserId: string } | null {
+    const row = this.db.prepare('SELECT * FROM thread_bindings WHERE chat_id = ? AND thread_id = ?')
+      .get(chatId, threadId) as any;
+    if (!row) return null;
+    return { projectName: row.project_name, creatorUserId: row.creator_user_id };
   }
 
   close(): void {

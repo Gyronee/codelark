@@ -168,6 +168,52 @@ describe('Database', () => {
     });
   });
 
+  describe('thread_bindings', () => {
+    it('ensureThreadCreator + getThreadBinding returns creator with null project', () => {
+      db.ensureThreadCreator('chat_1', 'thread_1', 'ou_alice');
+      const binding = db.getThreadBinding('chat_1', 'thread_1');
+      expect(binding).toEqual({ projectName: null, creatorUserId: 'ou_alice' });
+    });
+
+    it('ensureThreadCreator twice is idempotent, keeps first creator', () => {
+      db.ensureThreadCreator('chat_1', 'thread_1', 'ou_alice');
+      db.ensureThreadCreator('chat_1', 'thread_1', 'ou_bob');
+      const binding = db.getThreadBinding('chat_1', 'thread_1');
+      expect(binding?.creatorUserId).toBe('ou_alice');
+    });
+
+    it('setThreadBinding after ensureThreadCreator returns true and sets project', () => {
+      db.ensureThreadCreator('chat_1', 'thread_1', 'ou_alice');
+      const result = db.setThreadBinding('chat_1', 'thread_1', 'my-app', 'ou_alice');
+      expect(result).toBe(true);
+      const binding = db.getThreadBinding('chat_1', 'thread_1');
+      expect(binding?.projectName).toBe('my-app');
+      expect(binding?.creatorUserId).toBe('ou_alice');
+    });
+
+    it('setThreadBinding twice returns false (already bound)', () => {
+      db.ensureThreadCreator('chat_1', 'thread_1', 'ou_alice');
+      db.setThreadBinding('chat_1', 'thread_1', 'my-app', 'ou_alice');
+      const result = db.setThreadBinding('chat_1', 'thread_1', 'other-app', 'ou_alice');
+      expect(result).toBe(false);
+      const binding = db.getThreadBinding('chat_1', 'thread_1');
+      expect(binding?.projectName).toBe('my-app');
+    });
+
+    it('setThreadBinding without prior ensureThreadCreator inserts full row', () => {
+      const result = db.setThreadBinding('chat_2', 'thread_2', 'my-app', 'ou_bob');
+      expect(result).toBe(true);
+      const binding = db.getThreadBinding('chat_2', 'thread_2');
+      expect(binding?.projectName).toBe('my-app');
+      expect(binding?.creatorUserId).toBe('ou_bob');
+    });
+
+    it('getThreadBinding for nonexistent returns null', () => {
+      const binding = db.getThreadBinding('chat_999', 'thread_999');
+      expect(binding).toBeNull();
+    });
+  });
+
   describe('task logs', () => {
     it('logs a task', () => {
       const sessionId = db.createSession('ou_123', null, 'my-app');
