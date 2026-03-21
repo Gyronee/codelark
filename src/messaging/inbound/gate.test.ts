@@ -13,7 +13,7 @@ const makeCtx = (o: Partial<MessageContext> = {}): MessageContext => ({
 const makeConfig = (o: Partial<Config> = {}): Config => ({
   feishu: { appId: 'cli_test', appSecret: 's' }, anthropicApiKey: undefined,
   workspaceDir: '/tmp', allowedUserIds: [], allowedGroupIds: [],
-  taskTimeoutMs: 300000, debounceMs: 500, botOpenId: '', ...o,
+  taskTimeoutMs: 300000, debounceMs: 500, botOpenId: '', sessionTitledOnly: false, ...o,
 });
 
 describe('checkGate', () => {

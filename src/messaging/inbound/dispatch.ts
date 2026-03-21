@@ -229,7 +229,11 @@ async function handleCommand(
       const { listLocalSessions, findSessionById, getRecentMessages } = await import('../../session/local-sessions.js');
 
       if (cmd.action === 'list' || !cmd.action) {
-        const sessions = listLocalSessions(10);
+        let sessions = listLocalSessions(20);
+        if (config.sessionTitledOnly) {
+          sessions = sessions.filter(s => s.summary !== s.sessionId.slice(0, 8));
+        }
+        sessions = sessions.slice(0, 10);
         if (sessions.length === 0) {
           await reply('没有发现本地 Claude Code 会话。');
           return;

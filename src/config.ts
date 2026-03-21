@@ -10,6 +10,7 @@ export interface Config {
   taskTimeoutMs: number;
   debounceMs: number;
   botOpenId: string;
+  sessionTitledOnly: boolean;  // /session list only shows sessions with customTitle
 }
 
 function requireEnv(name: string): string {
@@ -36,5 +37,6 @@ export function loadConfig(): Config {
     taskTimeoutMs: Number(process.env.TASK_TIMEOUT_MS) || 300000,
     debounceMs: Number(process.env.DEBOUNCE_MS) || 500,
     botOpenId: process.env.BOT_OPEN_ID || '',
+    sessionTitledOnly: process.env.SESSION_TITLED_ONLY === 'true',
   };
 }
