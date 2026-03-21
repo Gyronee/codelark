@@ -69,6 +69,24 @@ describe('ProjectManager', () => {
     });
   });
 
+  describe('ensureGroupDefault', () => {
+    it('creates groups/<sanitized>/ with git init and returns correct path and projectName', () => {
+      const result = pm.ensureGroupDefault('oc_123abc');
+      const expectedPath = join(TEST_WORKSPACE, 'groups', 'oc_123abc');
+      expect(result.path).toBe(expectedPath);
+      expect(result.projectName).toBe('group-oc_123abc');
+      expect(existsSync(expectedPath)).toBe(true);
+      expect(existsSync(join(expectedPath, '.git'))).toBe(true);
+    });
+
+    it('is idempotent — calling twice does not throw', () => {
+      expect(() => {
+        pm.ensureGroupDefault('oc_123abc');
+        pm.ensureGroupDefault('oc_123abc');
+      }).not.toThrow();
+    });
+  });
+
   describe('validateCloneUrl', () => {
     it('accepts https URLs', () => {
       expect(() => pm.validateCloneUrl('https://github.com/user/repo.git')).not.toThrow();

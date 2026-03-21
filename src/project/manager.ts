@@ -70,6 +70,18 @@ export class ProjectManager {
     return userDir;
   }
 
+  ensureGroupDefault(chatId: string): { path: string; projectName: string } {
+    const sanitized = chatId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const projectName = `group-${sanitized}`;
+    const groupDir = join(this.workspaceDir, 'groups', sanitized);
+    if (!existsSync(groupDir)) {
+      mkdirSync(groupDir, { recursive: true });
+      execFileSync('git', ['init'], { cwd: groupDir, stdio: 'ignore' });
+      logger.info({ chatId, path: groupDir }, 'Created default group workspace');
+    }
+    return { path: groupDir, projectName };
+  }
+
   validateCloneUrl(url: string): void {
     if (!url.startsWith('https://')) {
       throw new Error('Only https:// URLs are allowed for cloning.');
