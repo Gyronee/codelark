@@ -141,11 +141,12 @@ export class StreamingCard {
     this.flush.schedule(text);
   }
 
-  async complete(card: object): Promise<void> {
+  private async finalizeCard(card: object, phase: Phase, shouldFlush: boolean): Promise<void> {
     if (this.isTerminal) return;
-    await this.flush.waitForFlush();
+    if (shouldFlush) {
+      await this.flush.waitForFlush();
+    }
     this.flush.destroy();
-
     if (this.cardKitCardId) {
       this.cardKitSequence++;
       await setCardStreamingMode(this.cardKitCardId, false, this.cardKitSequence);
@@ -154,41 +155,13 @@ export class StreamingCard {
     } else if (this.cardMessageId) {
       await updateCard(this.cardMessageId, card);
     }
-    this.phase = 'completed';
+    this.phase = phase;
     await this.removeTyping();
   }
 
-  async abort(card: object): Promise<void> {
-    if (this.isTerminal) return;
-    this.flush.destroy();
-
-    if (this.cardKitCardId) {
-      this.cardKitSequence++;
-      await setCardStreamingMode(this.cardKitCardId, false, this.cardKitSequence);
-      this.cardKitSequence++;
-      await updateCardKitCard(this.cardKitCardId, CardBuilder.toCardKit2(card as any), this.cardKitSequence);
-    } else if (this.cardMessageId) {
-      await updateCard(this.cardMessageId, card);
-    }
-    this.phase = 'aborted';
-    await this.removeTyping();
-  }
-
-  async error(card: object): Promise<void> {
-    if (this.isTerminal) return;
-    this.flush.destroy();
-
-    if (this.cardKitCardId) {
-      this.cardKitSequence++;
-      await setCardStreamingMode(this.cardKitCardId, false, this.cardKitSequence);
-      this.cardKitSequence++;
-      await updateCardKitCard(this.cardKitCardId, CardBuilder.toCardKit2(card as any), this.cardKitSequence);
-    } else if (this.cardMessageId) {
-      await updateCard(this.cardMessageId, card);
-    }
-    this.phase = 'error';
-    await this.removeTyping();
-  }
+  async complete(card: object) { await this.finalizeCard(card, 'completed', true); }
+  async abort(card: object) { await this.finalizeCard(card, 'aborted', false); }
+  async error(card: object) { await this.finalizeCard(card, 'error', false); }
 
   async fallbackText(text: string): Promise<void> {
     await sendText(this.chatId, text, this.threadId ?? undefined);

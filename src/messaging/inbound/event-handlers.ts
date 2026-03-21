@@ -12,6 +12,7 @@ import * as registry from '../../channel/active-registry.js';
 import { fetchMessageContent, updateCard, deleteMessage } from '../outbound/send.js';
 import { recordMessage } from '../../channel/chat-history.js';
 import { resolvePermission } from './card-actions.js';
+import { CardBuilder } from '../../card/builder.js';
 import { logger } from '../../logger.js';
 
 export interface PipelineDeps {
@@ -41,6 +42,16 @@ export function createPipeline(deps: PipelineDeps): {
         const messageId = data?.context?.open_message_id ?? data?.open_message_id;
         logger.info({ action, userId, messageId }, 'Card action received');
 
+        const handlePermission = (allowed: boolean) => {
+          const taskId = data?.action?.value?.taskId;
+          const expectedUserId = data?.action?.value?.expectedUserId;
+          if (expectedUserId && userId !== expectedUserId) {
+            logger.warn({ userId, expectedUserId, taskId }, 'Ignoring click from non-initiator');
+            return;
+          }
+          if (taskId) resolvePermission(taskId, allowed);
+        };
+
         if (action === 'cancel_task') {
           if (userId) {
             const active = registry.getByUserId(userId);
@@ -53,27 +64,12 @@ export function createPipeline(deps: PipelineDeps): {
             }
           }
           // Keep cancel card visible as feedback
-          if (messageId) void updateCard(messageId, {
-            config: { update_multi: true },
-            elements: [{ tag: 'markdown', content: '⊘ 已取消任务', text_size: 'notation' }],
-          });
+          if (messageId) void updateCard(messageId, CardBuilder.status('⊘ 已取消任务'));
         } else if (action === 'confirm_danger') {
-          const taskId = data?.action?.value?.taskId;
-          const expectedUserId = data?.action?.value?.expectedUserId;
-          if (expectedUserId && userId !== expectedUserId) {
-            logger.warn({ userId, expectedUserId, taskId }, 'Ignoring confirm click from non-initiator');
-          } else if (taskId) {
-            resolvePermission(taskId, true);
-          }
+          handlePermission(true);
           // Card update handled by dispatch.ts — no updateCard here to avoid race condition
         } else if (action === 'reject_danger') {
-          const taskId = data?.action?.value?.taskId;
-          const expectedUserId = data?.action?.value?.expectedUserId;
-          if (expectedUserId && userId !== expectedUserId) {
-            logger.warn({ userId, expectedUserId, taskId }, 'Ignoring reject click from non-initiator');
-          } else if (taskId) {
-            resolvePermission(taskId, false);
-          }
+          handlePermission(false);
           // Card update handled by dispatch.ts
         } else if (action === 'reset_session') {
           if (userId) {
@@ -83,10 +79,7 @@ export function createPipeline(deps: PipelineDeps): {
               logger.info({ userId }, 'Session reset via card button');
             }
           }
-          if (messageId) void updateCard(messageId, {
-            config: { update_multi: true },
-            elements: [{ tag: 'markdown', content: '✓ 会话已重置', text_size: 'notation' }],
-          });
+          if (messageId) void updateCard(messageId, CardBuilder.status('✓ 会话已重置'));
         }
       } catch (err) {
         logger.warn({ err }, 'card.action.trigger handler error');

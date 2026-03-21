@@ -21,12 +21,11 @@ export function recordMessage(chatId: string, senderName: string, text: string):
   let entries = histories.get(chatId);
   if (!entries) {
     entries = [];
-    histories.set(chatId, entries);
-    // LRU eviction: drop oldest chat when map exceeds limit
-    if (histories.size > MAX_CHATS) {
-      const oldest = histories.keys().next().value!;
-      histories.delete(oldest);
+    // FIFO eviction: drop oldest chat when map exceeds limit
+    if (histories.size >= MAX_CHATS) {
+      histories.delete(histories.keys().next().value!);
     }
+    histories.set(chatId, entries);
   }
   entries.push({ senderName, text: text.slice(0, 500), timestamp: Date.now() });
   // Evict old entries

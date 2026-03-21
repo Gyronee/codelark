@@ -41,6 +41,7 @@ describe('CardBuilder', () => {
   it('builds cancelled card without header', () => {
     const c = CardBuilder.cancelled('my-app');
     expect(c.header).toBeUndefined();
+    expect(c.elements).toHaveLength(1);
     expect(JSON.stringify(c)).toContain('已停止');
     expect(JSON.stringify(c)).toContain('my-app');
   });

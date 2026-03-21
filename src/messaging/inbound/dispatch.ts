@@ -4,8 +4,8 @@ import type { Database } from '../../session/db.js';
 import type { SessionManager } from '../../session/manager.js';
 import type { ProjectManager } from '../../project/manager.js';
 import { parseCommand } from '../../utils/command.js';
-import { resolve, basename } from 'path';
-import { existsSync, realpathSync, statSync, unlinkSync } from 'fs';
+import { resolve, basename, sep } from 'path';
+import { realpathSync, statSync, unlinkSync } from 'fs';
 import { sendText, sendCard, updateCard, uploadFile, sendFile } from '../outbound/send.js';
 import { StreamingCard } from '../../card/streaming-card.js';
 import { CardBuilder, type ToolStatus } from '../../card/builder.js';
@@ -18,6 +18,18 @@ import { getUserModel, setUserModel, listModels } from '../../channel/user-model
 import { downloadImage, downloadFile } from './media.js';
 import { logger } from '../../logger.js';
 
+const DEFAULT_PROJECT_LABEL = 'My Workspace';
+
+function resolveProjectPath(
+  senderId: string, db: Database, projectManager: ProjectManager,
+): { projectName: string; projectPath: string } {
+  const user = db.getUser(senderId);
+  if (user?.active_project) {
+    return { projectName: user.active_project, projectPath: projectManager.resolve(user.active_project) };
+  }
+  return { projectName: DEFAULT_PROJECT_LABEL, projectPath: projectManager.ensureUserDefault(senderId) };
+}
+
 export async function dispatch(
   ctx: MessageContext,
   config: Config,
@@ -26,6 +38,7 @@ export async function dispatch(
   projectManager: ProjectManager,
 ): Promise<void> {
   db.upsertUser(ctx.senderId, ctx.senderName);
+  const threadId = ctx.threadId ?? undefined;
 
   const cmd = parseCommand(ctx.text);
   if (cmd) {
@@ -34,7 +47,7 @@ export async function dispatch(
   }
 
   if (!['text', 'image', 'file', 'post'].includes(ctx.messageType)) {
-    await sendText(ctx.chatId, '暂不支持该消息类型，请发送文字、图片或文件。', ctx.threadId ?? undefined);
+    await sendText(ctx.chatId, '暂不支持该消息类型，请发送文字、图片或文件。', threadId);
     return;
   }
 
@@ -50,7 +63,8 @@ async function handleCommand(
   projectManager: ProjectManager,
 ): Promise<void> {
   if (!cmd) return;
-  const reply = (text: string) => sendText(ctx.chatId, text, ctx.threadId ?? undefined);
+  const threadId = ctx.threadId ?? undefined;
+  const reply = (text: string) => sendText(ctx.chatId, text, threadId);
 
   switch (cmd.type) {
     case 'help': {
@@ -88,7 +102,7 @@ async function handleCommand(
     }
     case 'reset': {
       const user = db.getUser(ctx.senderId);
-      const project = user?.active_project || 'My Workspace';
+      const project = user?.active_project || DEFAULT_PROJECT_LABEL;
       sessionManager.reset(ctx.senderId, ctx.threadId, project);
       await reply('Session reset.');
       break;
@@ -115,29 +129,20 @@ async function handleCommand(
       break;
     }
     case 'file': {
-      const threadId = ctx.threadId ?? undefined;
       const filePath = cmd.args.join(' ');
       if (!filePath) {
         await sendText(ctx.chatId, '用法: /file <文件路径>', threadId);
         return;
       }
-      const user = db.getUser(ctx.senderId);
-      let projectDir: string;
-      if (user?.active_project) {
-        projectDir = projectManager.resolve(user.active_project);
-      } else {
-        projectDir = projectManager.ensureUserDefault(ctx.senderId);
-      }
+      const { projectPath: projectDir } = resolveProjectPath(ctx.senderId, db, projectManager);
       const fullPath = resolve(projectDir, filePath);
 
       // Security: path traversal prevention (resolve symlinks to catch ../.. tricks)
       const realProjectDir = realpathSync(projectDir);
-      if (!existsSync(fullPath)) {
-        await sendText(ctx.chatId, `文件不存在: ${filePath}`, threadId);
-        return;
-      }
-      const realFullPath = realpathSync(fullPath);
-      if (!realFullPath.startsWith(realProjectDir)) {
+      let realFullPath: string;
+      try { realFullPath = realpathSync(fullPath); }
+      catch { await sendText(ctx.chatId, `文件不存在: ${filePath}`, threadId); return; }
+      if (!realFullPath.startsWith(realProjectDir + sep)) {
         await sendText(ctx.chatId, '路径不合法：不能访问项目目录以外的文件', threadId);
         return;
       }
@@ -159,7 +164,7 @@ async function handleCommand(
         const scopes = 'docx:document:create docx:document:readonly docx:document:write_only';
         const deviceAuth = await requestDeviceAuthorization(config.feishu.appId, config.feishu.appSecret, scopes);
         const card = buildOAuthCard(deviceAuth.verificationUriComplete, deviceAuth.userCode);
-        const messageId = await sendCard(ctx.chatId, card, ctx.threadId ?? undefined);
+        const messageId = await sendCard(ctx.chatId, card, threadId);
 
         // Poll in background (fire-and-forget)
         pollDeviceToken({
@@ -183,7 +188,7 @@ async function handleCommand(
               }
             } catch (err) {
               logger.warn({ err }, 'Identity verification failed');
-              if (messageId) await updateCard(messageId, { config: { update_multi: true }, elements: [{ tag: 'markdown', content: '✗ 身份验证失败，请重试' }] });
+              if (messageId) await updateCard(messageId, CardBuilder.status('✗ 身份验证失败，请重试'));
               return;
             }
 
@@ -264,27 +269,27 @@ async function handleClaudeTask(
   ctx: MessageContext, config: Config, db: Database,
   sessionManager: SessionManager, projectManager: ProjectManager,
 ): Promise<void> {
+  const threadId = ctx.threadId ?? undefined;
   const existing = registry.getByUserId(ctx.senderId);
   if (existing) {
-    await sendText(ctx.chatId, '上一个任务还在执行中，请等待完成或发送 /cancel 取消。', ctx.threadId ?? undefined);
+    await sendText(ctx.chatId, '上一个任务还在执行中，请等待完成或发送 /cancel 取消。', threadId);
     return;
   }
 
-  const user = db.getUser(ctx.senderId);
-  const projectName = user?.active_project || 'My Workspace';
+  let projectName: string;
   let projectPath: string;
-  if (user?.active_project) {
-    try { projectPath = projectManager.resolve(user.active_project); }
-    catch (e: any) { await sendText(ctx.chatId, e.message, ctx.threadId ?? undefined); return; }
-  } else {
-    projectPath = projectManager.ensureUserDefault(ctx.senderId);
+  try {
+    ({ projectName, projectPath } = resolveProjectPath(ctx.senderId, db, projectManager));
+  } catch (e: any) {
+    await sendText(ctx.chatId, e.message, threadId);
+    return;
   }
 
   // Download attached resources (images / files)
   const imagePaths: string[] = [];
   const fileHints: string[] = [];
 
-  for (const res of ctx.resources) {
+  await Promise.allSettled(ctx.resources.map(async (res) => {
     try {
       const msgId = res.sourceMessageId || ctx.messageId;
       if (res.type === 'image') {
@@ -299,7 +304,7 @@ async function handleClaudeTask(
     } catch (err) {
       logger.warn({ err, resource: res }, 'Failed to download resource');
     }
-  }
+  }));
 
   const session = sessionManager.getOrCreate(ctx.senderId, ctx.threadId, projectName);
   const card = new StreamingCard(ctx.chatId, ctx.threadId, ctx.messageId);
@@ -364,10 +369,10 @@ async function handleClaudeTask(
 
           // Create or reuse the single confirm card
           if (!confirmMessageId) {
-            confirmMessageId = await sendCard(ctx.chatId, confirmCard, ctx.threadId ?? undefined);
+            confirmMessageId = await sendCard(ctx.chatId, confirmCard, threadId);
             if (!confirmMessageId) {
               // sendCard failed — auto-deny, notify user
-              await sendText(ctx.chatId, '⚠️ 确认卡片发送失败，操作已自动跳过', ctx.threadId ?? undefined);
+              await sendText(ctx.chatId, '⚠️ 确认卡片发送失败，操作已自动跳过', threadId);
               resolve(false);
               return false;
             }
@@ -381,20 +386,11 @@ async function handleClaudeTask(
           // Update card after decision — dispatch is the sole owner
           if (confirmMessageId) {
             if (allowed) {
-              await updateCard(confirmMessageId, {
-                config: { update_multi: true },
-                elements: [{ tag: 'markdown', content: '⏳ 已允许，执行中...', text_size: 'notation' }],
-              });
+              await updateCard(confirmMessageId, CardBuilder.status('⏳ 已允许，执行中...'));
             } else if (abortController.signal.aborted) {
-              await updateCard(confirmMessageId, {
-                config: { update_multi: true },
-                elements: [{ tag: 'markdown', content: '⊘ 任务已取消', text_size: 'notation' }],
-              });
+              await updateCard(confirmMessageId, CardBuilder.status('⊘ 任务已取消'));
             } else {
-              await updateCard(confirmMessageId, {
-                config: { update_multi: true },
-                elements: [{ tag: 'markdown', content: '✗ 已拒绝', text_size: 'notation' }],
-              });
+              await updateCard(confirmMessageId, CardBuilder.status('✗ 已拒绝'));
             }
           }
 
@@ -414,10 +410,7 @@ async function handleClaudeTask(
       registry.removeActive(queueKey);
       // Update confirm card to final summary
       if (confirmMessageId) {
-        await updateCard(confirmMessageId, {
-          config: { update_multi: true },
-          elements: [{ tag: 'markdown', content: `✓ 任务完成，共确认 ${confirmCount} 次操作`, text_size: 'notation' }],
-        });
+        await updateCard(confirmMessageId, CardBuilder.status(`✓ 任务完成，共确认 ${confirmCount} 次操作`));
       }
       if (result.sessionId) db.updateClaudeSessionId(session.id, result.sessionId);
       db.logTask(session.id, ctx.text, result.text, JSON.stringify(tools.map(t => t.tool)), result.durationMs, 'success');
@@ -434,10 +427,7 @@ async function handleClaudeTask(
       clearTimeout(timeout);
       registry.removeActive(queueKey);
       if (confirmMessageId) {
-        await updateCard(confirmMessageId, {
-          config: { update_multi: true },
-          elements: [{ tag: 'markdown', content: `✗ 任务异常，共确认 ${confirmCount} 次操作`, text_size: 'notation' }],
-        });
+        await updateCard(confirmMessageId, CardBuilder.status(`✗ 任务异常，共确认 ${confirmCount} 次操作`));
       }
       db.logTask(session.id, ctx.text, error, null, Date.now() - startTime, 'error');
       if (abortController.signal.aborted) {

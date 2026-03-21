@@ -161,9 +161,14 @@ export const CardBuilder = {
     return {
       config: { wide_screen_mode: true },
       elements: [
-        { tag: 'markdown', content: '已停止' },
         { tag: 'markdown', content: `已停止 · ${project}`, text_size: 'notation' },
       ],
+    };
+  },
+  status(text: string): FeishuCard {
+    return {
+      config: { update_multi: true },
+      elements: [{ tag: 'markdown', content: text, text_size: 'notation' }],
     };
   },
   buildFallbackText(markdown: string): string {

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, statSync, rmSync } from 'fs';
 import { join } from 'path';
-import { execSync, execFileSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { randomBytes } from 'crypto';
 import { readConfig, writeConfig } from './config.js';
 import { logger } from '../logger.js';
@@ -45,7 +45,7 @@ export class ProjectManager {
     if (existsSync(projectPath)) throw new Error(`Project "${name}" already exists.`);
 
     mkdirSync(projectPath, { recursive: true });
-    execSync('git init', { cwd: projectPath, stdio: 'ignore' });
+    execFileSync('git', ['init'], { cwd: projectPath, stdio: 'ignore' });
 
     const config = readConfig(this.workspaceDir);
     config.projects[name] = {
@@ -63,7 +63,7 @@ export class ProjectManager {
     const userDir = join(this.workspaceDir, 'users', safeName);
     if (!existsSync(userDir)) {
       mkdirSync(userDir, { recursive: true });
-      execSync('git init', { cwd: userDir, stdio: 'ignore' });
+      execFileSync('git', ['init'], { cwd: userDir, stdio: 'ignore' });
       logger.info({ userId, path: userDir }, 'Created default user workspace');
     }
     return userDir;
