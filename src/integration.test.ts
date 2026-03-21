@@ -50,7 +50,7 @@ describe('Integration: pipeline flow', () => {
     const config = {
       feishu: { appId: 'cli_test', appSecret: '' },
       anthropicApiKey: undefined, workspaceDir: TEST_WORKSPACE,
-      allowedUserIds: ['ou_user1'], allowedGroupIds: [],
+      allowedUserIds: ['ou_user1'], allowedGroupIds: [], adminUserIds: [],
       taskTimeoutMs: 300000, debounceMs: 500, botOpenId: 'ou_bot', sessionTitledOnly: false,
     };
     expect(checkGate(ctx, config)).toBe('pass');

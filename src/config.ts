@@ -7,6 +7,7 @@ export interface Config {
   workspaceDir: string;
   allowedUserIds: string[];
   allowedGroupIds: string[];
+  adminUserIds: string[];
   taskTimeoutMs: number;
   debounceMs: number;
   botOpenId: string;
@@ -38,5 +39,6 @@ export function loadConfig(): Config {
     debounceMs: Number(process.env.DEBOUNCE_MS) || 500,
     botOpenId: process.env.BOT_OPEN_ID || '',
     sessionTitledOnly: process.env.SESSION_TITLED_ONLY === 'true',
+    adminUserIds: parseList(process.env.ADMIN_USER_IDS),
   };
 }

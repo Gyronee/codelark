@@ -12,7 +12,7 @@ const makeCtx = (o: Partial<MessageContext> = {}): MessageContext => ({
 
 const makeConfig = (o: Partial<Config> = {}): Config => ({
   feishu: { appId: 'cli_test', appSecret: 's' }, anthropicApiKey: undefined,
-  workspaceDir: '/tmp', allowedUserIds: [], allowedGroupIds: [],
+  workspaceDir: '/tmp', allowedUserIds: [], allowedGroupIds: [], adminUserIds: [],
   taskTimeoutMs: 300000, debounceMs: 500, botOpenId: '', sessionTitledOnly: false, ...o,
 });
 
