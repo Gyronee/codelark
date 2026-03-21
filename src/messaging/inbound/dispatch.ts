@@ -77,31 +77,53 @@ async function handleCommand(
 
   switch (cmd.type) {
     case 'help': {
-      const help = [
-        '📋 可用命令：', '',
+      const user = db.getUser(ctx.senderId);
+      const activeProject = user?.active_project || '';
+
+      const lines: string[] = [
+        '**基本命令**',
         '/help — 显示帮助信息',
         '/status — 查看当前项目和任务状态',
-        '/whoami — 查看你的 open_id', '',
-        '💬 会话：',
+        '/whoami — 查看你的 open\\_id',
         '/reset — 重置当前对话上下文',
         '/cancel — 取消正在执行的任务',
         '/model — 查看/切换模型（opus, sonnet, haiku）', '',
-        '📁 项目管理：',
+        '**项目管理**',
         '/project list — 列出所有项目',
         '/project use <名称> — 切换到指定项目',
         '/project create <名称> — 创建新空项目',
         '/project clone <地址> — 克隆 Git 仓库（仅支持 https）',
         '/project home — 切换到个人目录',
-        '/file <path> — 从项目目录获取文件',
-        '/auth — 授权飞书账号（文档读写）', '',
-        '🖥️ 本地会话：',
-        '/session list — 列出本地 Claude Code 会话',
-        '/session resume <ID> — 恢复指定会话',
-        '/session exit — 退出恢复模式', '',
-        '直接发送文字即可与 Claude Code 对话。',
-        '无需设置项目，系统会自动为你创建独立的工作目录。',
+        '/file <路径> — 从项目目录获取文件',
       ];
-      await reply(help.join('\n'));
+
+      // Conditionally show grant/revoke/access
+      const showGrant = (activeProject && canGrant(ctx.senderId, activeProject, config.workspaceDir, config)) || isAdmin(ctx.senderId, config);
+      if (showGrant) {
+        lines.push('/project grant <用户> — 授权用户访问当前项目');
+        lines.push('/project revoke <用户> — 撤销用户权限');
+        lines.push('/project access — 查看项目授权列表');
+      }
+      // Admin-only: cross-project grant
+      if (isAdmin(ctx.senderId, config)) {
+        lines.push('/project grant <用户> <项目> — 授权用户访问指定项目');
+      }
+
+      lines.push('', '**本地会话**');
+      lines.push('/session list — 列出本地 Claude Code 会话');
+      lines.push('/session resume <ID> — 恢复指定会话');
+      if (user?.resumed_session_id) {
+        lines.push('/session exit — 退出恢复模式');
+      }
+
+      lines.push('', '**账号**');
+      lines.push('/auth — 授权飞书账号（文档读写）');
+      lines.push('', '---', '直接发送文字即可与 Claude Code 对话。');
+
+      await sendCard(ctx.chatId, {
+        header: { title: { tag: 'plain_text' as const, content: '📋 帮助' }, template: 'blue' as const },
+        elements: [{ tag: 'markdown' as const, content: lines.join('\n') }],
+      }, threadId);
       break;
     }
     case 'whoami':
@@ -132,9 +154,69 @@ async function handleCommand(
     case 'cancel':
       await reply('没有正在执行的任务。');
       break;
-    case 'project':
-      await handleProjectCommand(cmd, ctx, config, db, projectManager, reply);
+    case 'project': {
+      if (cmd.action === 'list') {
+        // Merged view: CLI sessions + bot projects
+        const { listLocalSessions } = await import('../../session/local-sessions.js');
+
+        // 1. Bot projects (filtered by access)
+        const botProjects = projectManager.list()
+          .filter(p => hasAccess(ctx.senderId, p.name, config.workspaceDir, config));
+
+        // 2. CLI sessions (filtered by access + sessionTitledOnly)
+        let cliSessions = listLocalSessions(50);
+        if (config.sessionTitledOnly) {
+          cliSessions = cliSessions.filter(s => s.hasCustomTitle);
+        }
+        cliSessions = cliSessions.filter(s => hasAccess(ctx.senderId, s.projectName, config.workspaceDir, config));
+
+        // 3. Group by projectName, keep most recent per project
+        const cliByProject = new Map<string, typeof cliSessions[0]>();
+        for (const s of cliSessions) {
+          const existing = cliByProject.get(s.projectName);
+          if (!existing || s.lastModified > existing.lastModified) {
+            cliByProject.set(s.projectName, s);
+          }
+        }
+
+        // 4. Build merged list
+        const botProjectNames = new Set(botProjects.map(p => p.name));
+        const lines: string[] = [];
+        let idx = 1;
+
+        // CLI projects first (more relevant)
+        for (const [projectName, session] of cliByProject) {
+          const isBoth = botProjectNames.has(projectName);
+          const tag = isBoth ? '(本地+Bot)' : '(本地)';
+          const title = session.summary !== session.sessionId.slice(0, 8) ? `"${session.summary}"` : '';
+          const ago = formatTimeAgo(session.lastModified);
+          const titlePart = title ? `${title} · ` : '';
+          lines.push(`${idx}. **${projectName}** ${tag}\n    ${titlePart}🕐 ${ago} · ID: ${session.sessionId.slice(0, 8)}`);
+          idx++;
+        }
+
+        // Bot-only projects (not already shown as CLI)
+        for (const p of botProjects) {
+          if (!cliByProject.has(p.name)) {
+            lines.push(`${idx}. **${p.name}** (Bot)\n    ${p.description || '通过 /project create 创建'}`);
+            idx++;
+          }
+        }
+
+        if (lines.length === 0) {
+          await reply('没有项目。使用 /project create <名称> 创建，或在本地 Claude Code 中打开项目。');
+        } else {
+          lines.push('---\n/project use <名称> 切换项目\n/session resume <ID> 恢复 CLI 会话');
+          await sendCard(ctx.chatId, {
+            header: { title: { tag: 'plain_text' as const, content: '📋 项目列表' }, template: 'blue' as const },
+            elements: [{ tag: 'markdown' as const, content: lines.join('\n\n') }],
+          }, threadId);
+        }
+      } else {
+        await handleProjectCommand(cmd, ctx, config, db, projectManager, reply);
+      }
       break;
+    }
     case 'model': {
       if (!cmd.action) {
         const current = getUserModel(ctx.senderId);
@@ -335,12 +417,7 @@ async function handleProjectCommand(
 ): Promise<void> {
   const user = db.getUser(ctx.senderId);
   switch (cmd.action) {
-    case 'list': {
-      const projects = projectManager.list();
-      if (projects.length === 0) { await reply('没有已配置的项目。使用 /project create <名称> 或 /project clone <地址>。'); return; }
-      await reply(projects.map(p => `• ${p.name}${p.description ? ` — ${p.description}` : ''}`).join('\n'));
-      break;
-    }
+    // 'list' is handled inline in handleCommand for card rendering
     case 'use': {
       const name = cmd.args[0];
       if (!name) { await reply('用法: /project use <名称>'); return; }
