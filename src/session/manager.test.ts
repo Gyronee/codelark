@@ -52,4 +52,26 @@ describe('SessionManager', () => {
     expect(s2.claude_session_id).toBeNull();
   });
 
+  it('getOrCreateGroup creates and retrieves a group session', () => {
+    const session = sm.getOrCreateGroup('chat_1', null, 'group-proj');
+    expect(session.id).toBeTruthy();
+    expect(session.feishu_user_id).toBe('group:chat_1');
+    expect(session.project_name).toBe('group-proj');
+    expect(session.claude_session_id).toBeNull();
+  });
+
+  it('getOrCreateGroup returns same session on second call', () => {
+    const s1 = sm.getOrCreateGroup('chat_1', 'thread_a', 'group-proj');
+    const s2 = sm.getOrCreateGroup('chat_1', 'thread_a', 'group-proj');
+    expect(s1.id).toBe(s2.id);
+  });
+
+  it('resetGroup clears claude_session_id', () => {
+    const s1 = sm.getOrCreateGroup('chat_1', null, 'group-proj');
+    db.updateClaudeSessionId(s1.id, 'claude-xyz');
+    sm.resetGroup('chat_1', null, 'group-proj');
+    const s2 = sm.getOrCreateGroup('chat_1', null, 'group-proj');
+    expect(s2.claude_session_id).toBeNull();
+  });
+
 });

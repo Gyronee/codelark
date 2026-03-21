@@ -270,6 +270,20 @@ export class Database {
     return { projectName: row.project_name, creatorUserId: row.creator_user_id };
   }
 
+  findGroupSession(chatId: string, threadId: string | null, projectName: string): SessionRow | null {
+    return this.db.prepare(
+      'SELECT * FROM sessions WHERE feishu_user_id = ? AND topic_id IS ? AND project_name = ?'
+    ).get(`group:${chatId}`, threadId, projectName) as SessionRow | null;
+  }
+
+  createGroupSession(chatId: string, threadId: string | null, projectName: string): SessionRow {
+    const id = randomUUID();
+    this.db.prepare(
+      'INSERT INTO sessions (id, feishu_user_id, topic_id, project_name) VALUES (?, ?, ?, ?)'
+    ).run(id, `group:${chatId}`, threadId, projectName);
+    return this.findGroupSession(chatId, threadId, projectName)!;
+  }
+
   close(): void {
     this.db.close();
   }

@@ -132,7 +132,12 @@ export function createPipeline(deps: PipelineDeps): {
         const ctx = parseMessageEvent(data, deps.botOpenId);
         logger.info({ eventId, chatId: ctx.chatId, text: ctx.text.slice(0, 50) }, 'Processing message');
 
-        // Stage 3b: Record to chat history (for group context, before gate)
+        // Stage 3b: Record thread creator for group threads
+        if (ctx.chatType === 'group' && ctx.threadId) {
+          deps.db.ensureThreadCreator(ctx.chatId, ctx.threadId, ctx.senderId);
+        }
+
+        // Stage 3c: Record to chat history (for group context, before gate)
         if (ctx.chatType === 'group') {
           recordMessage(ctx.chatId, ctx.senderName || ctx.senderId, ctx.text);
         }

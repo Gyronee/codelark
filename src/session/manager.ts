@@ -19,4 +19,20 @@ export class SessionManager {
       this.db.resetSession(session.id);
     }
   }
+
+  getOrCreateGroup(chatId: string, threadId: string | null, projectName: string): SessionRow {
+    const existing = this.db.findGroupSession(chatId, threadId, projectName);
+    if (existing) {
+      this.db.touchSession(existing.id);
+      return existing;
+    }
+    return this.db.createGroupSession(chatId, threadId, projectName);
+  }
+
+  resetGroup(chatId: string, threadId: string | null, projectName: string): void {
+    const session = this.db.findGroupSession(chatId, threadId, projectName);
+    if (session) {
+      this.db.resetSession(session.id);
+    }
+  }
 }

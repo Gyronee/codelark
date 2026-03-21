@@ -17,6 +17,7 @@ import { getRecentHistory, formatHistoryContext } from '../../channel/chat-histo
 import { getUserModel, setUserModel, listModels } from '../../channel/user-model.js';
 import { downloadImage, downloadFile } from './media.js';
 import { hasAccess, canGrant, grantAccess, revokeAccess, getProjectAccess, isAdmin } from '../../auth/access.js';
+import { isGroupAdmin } from '../../auth/group-admin.js';
 import { logger } from '../../logger.js';
 
 const DEFAULT_PROJECT_LABEL = 'My Workspace';
@@ -46,6 +47,20 @@ function resolveProjectPath(
     }
   }
   return { projectName: DEFAULT_PROJECT_LABEL, projectPath: projectManager.ensureUserDefault(senderId) };
+}
+
+function resolveGroupProject(
+  chatId: string, threadId: string | null, db: Database, projectManager: ProjectManager,
+): { projectName: string; projectPath: string } {
+  if (threadId) {
+    const binding = db.getThreadBinding(chatId, threadId);
+    if (binding?.projectName) {
+      try { return { projectName: binding.projectName, projectPath: projectManager.resolve(binding.projectName) }; }
+      catch { /* not a bot project — fall through */ }
+    }
+  }
+  const { path: groupDir, projectName } = projectManager.ensureGroupDefault(chatId);
+  return { projectName, projectPath: groupDir };
 }
 
 export async function dispatch(
@@ -217,7 +232,7 @@ async function handleCommand(
           }, threadId);
         }
       } else {
-        await handleProjectCommand(cmd, ctx, config, db, projectManager, reply, threadId);
+        await handleProjectCommand(cmd, ctx, config, db, sessionManager, projectManager, reply, threadId);
       }
       break;
     }
@@ -433,6 +448,22 @@ async function handleCommand(
       }
 
       if (cmd.action === 'new') {
+        if (ctx.chatType === 'group') {
+          let canReset = isAdmin(ctx.senderId, config) || await isGroupAdmin(ctx.chatId, ctx.senderId);
+          if (!canReset && ctx.threadId) {
+            const binding = db.getThreadBinding(ctx.chatId, ctx.threadId);
+            if (binding?.creatorUserId === ctx.senderId) canReset = true;
+          }
+          if (!canReset) {
+            await reply('只有群管理员或话题发起者可以重置会话');
+            return;
+          }
+          const groupProject = resolveGroupProject(ctx.chatId, ctx.threadId, db, projectManager);
+          sessionManager.resetGroup(ctx.chatId, ctx.threadId, groupProject.projectName);
+          await reply('已创建新会话，对话上下文已清空。');
+          return;
+        }
+        // P2P: existing logic
         const currentUser = db.getUser(ctx.senderId);
         const project = currentUser?.active_project || DEFAULT_PROJECT_LABEL;
         sessionManager.reset(ctx.senderId, ctx.threadId, project);
@@ -451,6 +482,7 @@ async function handleProjectCommand(
   ctx: MessageContext,
   config: Config,
   db: Database,
+  sessionManager: SessionManager,
   projectManager: ProjectManager,
   reply: (text: string) => Promise<void>,
   threadId?: string,
@@ -461,6 +493,34 @@ async function handleProjectCommand(
     case 'use': {
       const name = cmd.args[0];
       if (!name) { await reply('用法: /project use <名称>'); return; }
+      if (ctx.chatType === 'group') {
+        if (!ctx.threadId) {
+          await reply('群主消息区使用群默认目录，请在话题中使用 /project use');
+          return;
+        }
+        const existing = db.getThreadBinding(ctx.chatId, ctx.threadId);
+        if (existing?.projectName) {
+          await reply(`该话题已绑定项目 ${existing.projectName}，不可更改`);
+          return;
+        }
+        // Check permission: thread creator, group admin, or bot admin
+        const binding = db.getThreadBinding(ctx.chatId, ctx.threadId);
+        const isCreator = binding?.creatorUserId === ctx.senderId;
+        const isAdminUser = isAdmin(ctx.senderId, config) || await isGroupAdmin(ctx.chatId, ctx.senderId);
+        if (!isCreator && !isAdminUser) {
+          await reply('只有话题发起者或管理员可以绑定项目');
+          return;
+        }
+        // Check access to the target project
+        if (!hasAccess(ctx.senderId, name, config.workspaceDir, config)) {
+          await reply('没有权限访问该项目');
+          return;
+        }
+        db.setThreadBinding(ctx.chatId, ctx.threadId, name, ctx.senderId);
+        sessionManager.resetGroup(ctx.chatId, ctx.threadId, name);
+        await reply(`话题已绑定项目 ${name}，对话上下文已重置`);
+        return;
+      }
       if (!hasAccess(ctx.senderId, name, config.workspaceDir, config)) {
         await reply('没有权限访问该项目');
         return;
@@ -572,28 +632,40 @@ async function handleClaudeTask(
     return;
   }
 
-  // Check if user has a resumed CLI session
-  const user = db.getUser(ctx.senderId);
   let projectPath: string;
   let projectName: string;
   let resumedCliSession: string | null = null;
+  let session: import('../../session/db.js').SessionRow;
 
-  if (user?.resumed_session_id && user?.resumed_cwd) {
-    projectPath = user.resumed_cwd;
-    projectName = user.resumed_cwd.split('/').pop() || 'CLI Session';
-    resumedCliSession = user.resumed_session_id;
+  if (ctx.chatType === 'group') {
+    // Group: shared session keyed by chatId
+    const resolved = resolveGroupProject(ctx.chatId, ctx.threadId, db, projectManager);
+    projectPath = resolved.projectPath;
+    projectName = resolved.projectName;
+    session = sessionManager.getOrCreateGroup(ctx.chatId, ctx.threadId, projectName);
   } else {
-    try {
-      ({ projectName, projectPath } = resolveProjectPath(ctx.senderId, db, projectManager));
-    } catch (e: any) {
-      await sendText(ctx.chatId, e.message, threadId);
+    // P2P: existing per-user logic
+    const user = db.getUser(ctx.senderId);
+
+    if (user?.resumed_session_id && user?.resumed_cwd) {
+      projectPath = user.resumed_cwd;
+      projectName = user.resumed_cwd.split('/').pop() || 'CLI Session';
+      resumedCliSession = user.resumed_session_id;
+    } else {
+      try {
+        ({ projectName, projectPath } = resolveProjectPath(ctx.senderId, db, projectManager));
+      } catch (e: any) {
+        await sendText(ctx.chatId, e.message, threadId);
+        return;
+      }
+    }
+
+    if (!hasAccess(ctx.senderId, projectName, config.workspaceDir, config)) {
+      await sendText(ctx.chatId, '没有权限访问当前项目，请使用 /project use 切换到有权限的项目', threadId);
       return;
     }
-  }
 
-  if (!hasAccess(ctx.senderId, projectName, config.workspaceDir, config)) {
-    await sendText(ctx.chatId, '没有权限访问当前项目，请使用 /project use 切换到有权限的项目', threadId);
-    return;
+    session = sessionManager.getOrCreate(ctx.senderId, ctx.threadId, projectName);
   }
 
   // Download attached resources (images / files)
@@ -617,7 +689,6 @@ async function handleClaudeTask(
     }
   }));
 
-  const session = sessionManager.getOrCreate(ctx.senderId, ctx.threadId, projectName);
   const effectiveSessionId = resumedCliSession || session.claude_session_id;
   const card = new StreamingCard(ctx.chatId, ctx.threadId, ctx.messageId);
   await card.startTyping(); // Add typing reaction immediately, defer card creation to first token
