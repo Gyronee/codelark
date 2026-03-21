@@ -139,7 +139,12 @@ export function createPipeline(deps: PipelineDeps): {
 
         // Stage 3c: Record to chat history (for group context, before gate)
         if (ctx.chatType === 'group') {
-          recordMessage(ctx.chatId, ctx.senderName || ctx.senderId, ctx.text, ctx.threadId);
+          if (!ctx.senderName && ctx.senderId) {
+            const { resolveUserName } = await import('./user-name-cache.js');
+            const name = await resolveUserName(ctx.senderId);
+            if (name) ctx.senderName = name;
+          }
+          recordMessage(ctx.chatId, ctx.senderName || ctx.senderId, ctx.senderId, ctx.text, ctx.threadId);
         }
 
         // Stage 3c: Resolve quoted message content and resources (if replying to a message)

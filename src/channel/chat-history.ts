@@ -6,6 +6,7 @@
 
 export interface HistoryEntry {
   senderName: string;
+  senderId: string;
   text: string;
   timestamp: number;
 }
@@ -20,7 +21,7 @@ function historyKey(chatId: string, threadId?: string | null): string {
   return threadId ? `${chatId}:${threadId}` : chatId;
 }
 
-export function recordMessage(chatId: string, senderName: string, text: string, threadId?: string | null): void {
+export function recordMessage(chatId: string, senderName: string, senderId: string, text: string, threadId?: string | null): void {
   if (!text.trim()) return;
   const key = historyKey(chatId, threadId);
   let entries = histories.get(key);
@@ -32,7 +33,7 @@ export function recordMessage(chatId: string, senderName: string, text: string, 
     }
     histories.set(key, entries);
   }
-  entries.push({ senderName, text: text.slice(0, 500), timestamp: Date.now() });
+  entries.push({ senderName, senderId, text: text.slice(0, 500), timestamp: Date.now() });
   // Evict old entries
   while (entries.length > MAX_ENTRIES) entries.shift();
 }
@@ -49,4 +50,17 @@ export function formatHistoryContext(entries: HistoryEntry[]): string {
   if (entries.length === 0) return '';
   const lines = entries.map(e => `${e.senderName}: ${e.text}`);
   return `[Recent group chat context]\n${lines.join('\n')}`;
+}
+
+export interface ActiveUser { name: string; userId: string; }
+
+export function getActiveUsers(chatId: string, threadId?: string | null): ActiveUser[] {
+  const entries = getRecentHistory(chatId, threadId);
+  const seen = new Map<string, string>(); // userId → name
+  for (const e of entries) {
+    if (e.senderId && !seen.has(e.senderId)) {
+      seen.set(e.senderId, e.senderName);
+    }
+  }
+  return Array.from(seen, ([userId, name]) => ({ name, userId }));
 }
