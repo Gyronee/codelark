@@ -213,7 +213,7 @@ async function handleCommand(
           }, threadId);
         }
       } else {
-        await handleProjectCommand(cmd, ctx, config, db, projectManager, reply);
+        await handleProjectCommand(cmd, ctx, config, db, projectManager, reply, threadId);
       }
       break;
     }
@@ -414,6 +414,7 @@ async function handleProjectCommand(
   db: Database,
   projectManager: ProjectManager,
   reply: (text: string) => Promise<void>,
+  threadId?: string,
 ): Promise<void> {
   const user = db.getUser(ctx.senderId);
   switch (cmd.action) {
@@ -443,14 +444,17 @@ async function handleProjectCommand(
         break;
       }
       // Show sessions for this project, guide user to resume
-      const lines = [`📁 **${name}** 是本地 CLI 项目，有 ${localSessions.length} 个会话：\n`];
+      const lines: string[] = [];
       for (const s of localSessions) {
         const title = s.hasCustomTitle ? s.summary : '_(未命名)_';
         const ago = formatTimeAgo(s.lastModified);
         lines.push(`• ${title} · 🕐 ${ago} · ID: ${s.sessionId.slice(0, 8)}`);
       }
-      lines.push('\n使用 /session resume <ID> 恢复会话');
-      await reply(lines.join('\n'));
+      lines.push('---\n使用 /session resume ID 恢复会话');
+      await sendCard(ctx.chatId, {
+        header: { title: { tag: 'plain_text', content: `📁 ${name} · ${localSessions.length} 个会话` }, template: 'blue' },
+        elements: [{ tag: 'markdown', content: lines.join('\n') }],
+      }, threadId);
       break;
     }
     case 'create': {

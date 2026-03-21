@@ -307,11 +307,51 @@ export function listLocalSessions(limit = 15): LocalSession[] {
 }
 
 /**
- * Find a session by ID prefix match.
+ * Find a session by ID prefix match — searches filesystem directly,
+ * not limited by listLocalSessions' limit/sort.
  */
 export function findSessionById(idPrefix: string): LocalSession | null {
-  const sessions = listLocalSessions(100);
-  return sessions.find(s => s.sessionId.startsWith(idPrefix)) ?? null;
+  const projectsDir = path.join(getClaudeDir(), 'projects');
+  if (!fs.existsSync(projectsDir)) return null;
+  const activeSessions = loadActiveSessions();
+
+  try {
+    for (const projDir of fs.readdirSync(projectsDir)) {
+      const projPath = path.join(projectsDir, projDir);
+      try {
+        for (const file of fs.readdirSync(projPath)) {
+          if (!file.endsWith('.jsonl')) continue;
+          const baseName = file.replace('.jsonl', '');
+          if (!baseName.startsWith(idPrefix)) continue;
+
+          const filePath = path.join(projPath, file);
+          const fileStat = fs.statSync(filePath);
+          const lines = readTail(filePath, 8192);
+          if (lines.length === 0) continue;
+
+          const cwd = extractCwdFromTail(lines);
+          if (!cwd) continue;
+          if (/\/users\/ou_/.test(cwd)) continue;
+
+          const sessionId = extractSessionIdFromTail(lines) || baseName;
+          const { summary, hasCustomTitle } = extractSummary(filePath, lines, sessionId);
+          const activeInfo = activeSessions.get(sessionId);
+
+          return {
+            sessionId,
+            cwd,
+            projectName: path.basename(cwd),
+            summary,
+            hasCustomTitle,
+            lastModified: fileStat.mtimeMs,
+            isActive: activeInfo?.active ?? false,
+            activePid: activeInfo?.active ? activeInfo.pid : undefined,
+          };
+        }
+      } catch { continue; }
+    }
+  } catch { /* ignore */ }
+  return null;
 }
 
 /**
