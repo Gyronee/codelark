@@ -722,7 +722,7 @@ async function handleClaudeTask(
   }
   // Inject group chat history for context
   if (ctx.chatType === 'group') {
-    const history = getRecentHistory(ctx.chatId);
+    const history = getRecentHistory(ctx.chatId, ctx.threadId);
     const historyContext = formatHistoryContext(history);
     if (historyContext) {
       prompt = `${historyContext}\n\n---\n\n${prompt}`;

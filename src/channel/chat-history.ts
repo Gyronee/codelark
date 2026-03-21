@@ -16,24 +16,30 @@ const MAX_CHATS = 200;
 
 const histories = new Map<string, HistoryEntry[]>();
 
-export function recordMessage(chatId: string, senderName: string, text: string): void {
+function historyKey(chatId: string, threadId?: string | null): string {
+  return threadId ? `${chatId}:${threadId}` : chatId;
+}
+
+export function recordMessage(chatId: string, senderName: string, text: string, threadId?: string | null): void {
   if (!text.trim()) return;
-  let entries = histories.get(chatId);
+  const key = historyKey(chatId, threadId);
+  let entries = histories.get(key);
   if (!entries) {
     entries = [];
     // FIFO eviction: drop oldest chat when map exceeds limit
     if (histories.size >= MAX_CHATS) {
       histories.delete(histories.keys().next().value!);
     }
-    histories.set(chatId, entries);
+    histories.set(key, entries);
   }
   entries.push({ senderName, text: text.slice(0, 500), timestamp: Date.now() });
   // Evict old entries
   while (entries.length > MAX_ENTRIES) entries.shift();
 }
 
-export function getRecentHistory(chatId: string): HistoryEntry[] {
-  const entries = histories.get(chatId);
+export function getRecentHistory(chatId: string, threadId?: string | null): HistoryEntry[] {
+  const key = historyKey(chatId, threadId);
+  const entries = histories.get(key);
   if (!entries) return [];
   const cutoff = Date.now() - MAX_AGE_MS;
   return entries.filter(e => e.timestamp > cutoff);

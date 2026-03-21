@@ -130,7 +130,7 @@ export function createPipeline(deps: PipelineDeps): {
 
         // Stage 3: Parse
         const ctx = parseMessageEvent(data, deps.botOpenId);
-        logger.info({ eventId, chatId: ctx.chatId, text: ctx.text.slice(0, 50) }, 'Processing message');
+        logger.info({ eventId, chatId: ctx.chatId, chatType: ctx.chatType, threadId: ctx.threadId, text: ctx.text.slice(0, 50) }, 'Processing message');
 
         // Stage 3b: Record thread creator for group threads
         if (ctx.chatType === 'group' && ctx.threadId) {
@@ -139,7 +139,7 @@ export function createPipeline(deps: PipelineDeps): {
 
         // Stage 3c: Record to chat history (for group context, before gate)
         if (ctx.chatType === 'group') {
-          recordMessage(ctx.chatId, ctx.senderName || ctx.senderId, ctx.text);
+          recordMessage(ctx.chatId, ctx.senderName || ctx.senderId, ctx.text, ctx.threadId);
         }
 
         // Stage 3c: Resolve quoted message content and resources (if replying to a message)
