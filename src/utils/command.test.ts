@@ -67,4 +67,22 @@ describe('parseCommand', () => {
       type: 'file', action: null, args: ['path', 'with', 'spaces/file.txt']
     });
   });
+
+  it('parses /session list', () => {
+    expect(parseCommand('/session list')).toEqual({
+      type: 'session', action: 'list', args: []
+    });
+  });
+
+  it('parses /session resume with ID', () => {
+    expect(parseCommand('/session resume ff48c101')).toEqual({
+      type: 'session', action: 'resume', args: ['ff48c101']
+    });
+  });
+
+  it('parses bare /session as list', () => {
+    expect(parseCommand('/session')).toEqual({
+      type: 'session', action: 'list', args: []
+    });
+  });
 });

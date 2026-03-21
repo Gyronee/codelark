@@ -20,6 +20,14 @@ import { logger } from '../../logger.js';
 
 const DEFAULT_PROJECT_LABEL = 'My Workspace';
 
+function formatTimeAgo(ms: number): string {
+  const diff = Date.now() - ms;
+  if (diff < 60_000) return '刚刚';
+  if (diff < 3600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
+  if (diff < 86400_000) return `${Math.floor(diff / 3600_000)} 小时前`;
+  return `${Math.floor(diff / 86400_000)} 天前`;
+}
+
 function resolveProjectPath(
   senderId: string, db: Database, projectManager: ProjectManager,
 ): { projectName: string; projectPath: string } {
@@ -85,6 +93,9 @@ async function handleCommand(
         '/project home — 切换到个人目录',
         '/file <path> — 从项目目录获取文件',
         '/auth — 授权飞书账号（文档读写）', '',
+        '🖥️ 本地会话：',
+        '/session list — 列出本地 Claude Code 会话',
+        '/session resume <ID> — 恢复指定会话', '',
         '直接发送文字即可与 Claude Code 对话。',
         '无需设置项目，系统会自动为你创建独立的工作目录。',
       ];
@@ -104,6 +115,7 @@ async function handleCommand(
       const user = db.getUser(ctx.senderId);
       const project = user?.active_project || DEFAULT_PROJECT_LABEL;
       sessionManager.reset(ctx.senderId, ctx.threadId, project);
+      db.clearResumedSession(ctx.senderId);
       await reply('Session reset.');
       break;
     }
@@ -213,6 +225,60 @@ async function handleCommand(
         return;
       }
     }
+    case 'session': {
+      const { listLocalSessions, findSessionById, getRecentMessages } = await import('../../session/local-sessions.js');
+
+      if (cmd.action === 'list' || !cmd.action) {
+        const sessions = listLocalSessions(10);
+        if (sessions.length === 0) {
+          await reply('没有发现本地 Claude Code 会话。');
+          return;
+        }
+        const lines = ['📋 **最近的 Claude Code 会话**\n'];
+        for (let i = 0; i < sessions.length; i++) {
+          const s = sessions[i];
+          const ago = formatTimeAgo(s.lastModified);
+          const active = s.isActive ? '  🔒 使用中' : '';
+          lines.push(`${i + 1}. 📁 ${s.projectName} · ${ago}${active}`);
+          lines.push(`   "${s.summary}"`);
+          lines.push(`   ID: ${s.sessionId.slice(0, 8)}\n`);
+        }
+        lines.push('使用 /session resume <ID> 恢复会话');
+        await reply(lines.join('\n'));
+        return;
+      }
+
+      if (cmd.action === 'resume') {
+        const idPrefix = cmd.args[0];
+        if (!idPrefix) { await reply('用法: /session resume <ID>'); return; }
+
+        const session = findSessionById(idPrefix);
+        if (!session) { await reply(`未找到 ID 以 "${idPrefix}" 开头的会话`); return; }
+        if (session.isActive) {
+          await reply(`该会话正在被本地 CLI 使用中 (PID: ${session.activePid})，请先关闭本地会话。`);
+          return;
+        }
+
+        db.setResumedSession(ctx.senderId, session.sessionId, session.cwd);
+
+        const messages = getRecentMessages(session.sessionId, 5);
+        const lines = [`🔄 **恢复会话:** "${session.summary}"\n📁 ${session.projectName} · ${formatTimeAgo(session.lastModified)}\n`];
+        if (messages.length > 0) {
+          lines.push('**最近对话：**');
+          for (const m of messages) {
+            const prefix = m.role === 'user' ? '👤 你' : '🤖 Claude';
+            lines.push(`${prefix}: ${m.text.slice(0, 100)}${m.text.length > 100 ? '...' : ''}`);
+          }
+          lines.push('');
+        }
+        lines.push('会话已恢复，可以继续对话。发送 /reset 可退出恢复模式。');
+        await reply(lines.join('\n'));
+        return;
+      }
+
+      await reply('用法: /session list 或 /session resume <ID>');
+      return;
+    }
   }
 }
 
@@ -276,13 +342,23 @@ async function handleClaudeTask(
     return;
   }
 
-  let projectName: string;
+  // Check if user has a resumed CLI session
+  const user = db.getUser(ctx.senderId);
   let projectPath: string;
-  try {
-    ({ projectName, projectPath } = resolveProjectPath(ctx.senderId, db, projectManager));
-  } catch (e: any) {
-    await sendText(ctx.chatId, e.message, threadId);
-    return;
+  let projectName: string;
+  let resumedCliSession: string | null = null;
+
+  if (user?.resumed_session_id && user?.resumed_cwd) {
+    projectPath = user.resumed_cwd;
+    projectName = user.resumed_cwd.split('/').pop() || 'CLI Session';
+    resumedCliSession = user.resumed_session_id;
+  } else {
+    try {
+      ({ projectName, projectPath } = resolveProjectPath(ctx.senderId, db, projectManager));
+    } catch (e: any) {
+      await sendText(ctx.chatId, e.message, threadId);
+      return;
+    }
   }
 
   // Download attached resources (images / files)
@@ -307,6 +383,7 @@ async function handleClaudeTask(
   }));
 
   const session = sessionManager.getOrCreate(ctx.senderId, ctx.threadId, projectName);
+  const effectiveSessionId = resumedCliSession || session.claude_session_id;
   const card = new StreamingCard(ctx.chatId, ctx.threadId, ctx.messageId);
   await card.startTyping(); // Add typing reaction immediately, defer card creation to first token
 
@@ -348,7 +425,7 @@ async function handleClaudeTask(
 
   const userModel = getUserModel(ctx.senderId);
 
-  await executeClaudeTask(prompt, projectPath, session.claude_session_id, abortController, {
+  await executeClaudeTask(prompt, projectPath, effectiveSessionId, abortController, {
     onText: (fullText) => { void card.scheduleStreamText(fullText); },
     onToolStart: (tool, detail) => {
       tools.push({ tool, status: 'running', detail });
