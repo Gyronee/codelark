@@ -231,7 +231,7 @@ async function handleCommand(
       if (cmd.action === 'list' || !cmd.action) {
         let sessions = listLocalSessions(20);
         if (config.sessionTitledOnly) {
-          sessions = sessions.filter(s => s.summary !== s.sessionId.slice(0, 8));
+          sessions = sessions.filter(s => s.hasCustomTitle);
         }
         sessions = sessions.slice(0, 10);
         if (sessions.length === 0) {
@@ -244,9 +244,9 @@ async function handleCommand(
           const ago = formatTimeAgo(s.lastModified);
           const status = s.isActive ? ' · 🔒 使用中' : '';
           const title = s.summary !== s.sessionId.slice(0, 8) ? `**${s.summary}**` : '_(未命名)_';
-          lines.push(`${i + 1}. ${title}${status}\n    📁 ${s.projectName} · 🕐 ${ago} · ID: \`${s.sessionId.slice(0, 8)}\``);
+          lines.push(`${i + 1}. ${title}${status}\n    📁 ${s.projectName} · 🕐 ${ago} · ID: ${s.sessionId.slice(0, 8)}`);
         }
-        lines.push('---\n输入 `/session resume <ID>` 恢复会话');
+        lines.push('---\n输入 /session resume ID 恢复会话');
         await sendCard(ctx.chatId, {
           header: { title: { tag: 'plain_text', content: '📋 本地 Claude Code 会话' }, template: 'blue' },
           elements: [{ tag: 'markdown', content: lines.join('\n\n') }],
@@ -280,7 +280,7 @@ async function handleCommand(
             lines.push(`${icon} ${text}`);
           }
         }
-        lines.push('---', '会话已恢复，直接发消息继续对话。\n输入 `/session exit` 退出恢复模式。');
+        lines.push('---', '会话已恢复，直接发消息继续对话。\n输入 /session exit 退出恢复模式。');
         await sendCard(ctx.chatId, {
           header: { title: { tag: 'plain_text', content: '🔄 已恢复会话' }, template: 'green' },
           elements: [{ tag: 'markdown', content: lines.join('\n') }],

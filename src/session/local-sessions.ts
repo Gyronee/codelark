@@ -7,6 +7,7 @@ export interface LocalSession {
   cwd: string;
   projectName: string;
   summary: string;
+  hasCustomTitle: boolean;
   lastModified: number;
   isActive: boolean;
   activePid?: number;
@@ -147,10 +148,10 @@ function findCustomTitle(filePath: string): string | null {
 /**
  * Extract a summary: customTitle > last user message > sessionId prefix.
  */
-function extractSummary(filePath: string, tailLines: string[], sessionId: string): string {
+function extractSummary(filePath: string, tailLines: string[], sessionId: string): { summary: string; hasCustomTitle: boolean } {
   // Try customTitle first (scan file for "custom-title" entries)
   const title = findCustomTitle(filePath);
-  if (title) return title;
+  if (title) return { summary: title, hasCustomTitle: true };
 
   // Fallback: last user message from tail
   let lastUserText = '';
@@ -165,9 +166,10 @@ function extractSummary(filePath: string, tailLines: string[], sessionId: string
     } catch { /* skip */ }
   }
   if (lastUserText) {
-    return lastUserText.length > 80 ? lastUserText.slice(0, 80) + '...' : lastUserText;
+    const truncated = lastUserText.length > 80 ? lastUserText.slice(0, 80) + '...' : lastUserText;
+    return { summary: truncated, hasCustomTitle: false };
   }
-  return sessionId.slice(0, 8);
+  return { summary: sessionId.slice(0, 8), hasCustomTitle: false };
 }
 
 /**
@@ -278,7 +280,7 @@ export function listLocalSessions(limit = 15): LocalSession[] {
           if (/\/users\/ou_/.test(cwd)) continue;
 
           const sessionId = extractSessionIdFromTail(lines) || baseName;
-          const summary = extractSummary(filePath, lines, sessionId);
+          const { summary, hasCustomTitle } = extractSummary(filePath, lines, sessionId);
           const activeInfo = activeSessions.get(sessionId);
 
           sessions.push({
@@ -286,6 +288,7 @@ export function listLocalSessions(limit = 15): LocalSession[] {
             cwd,
             projectName: path.basename(cwd),
             summary,
+            hasCustomTitle,
             lastModified: fileStat.mtimeMs,
             isActive: activeInfo?.active ?? false,
             activePid: activeInfo?.active ? activeInfo.pid : undefined,
