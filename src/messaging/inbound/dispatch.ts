@@ -74,8 +74,10 @@ async function resolveGroupProject(
       const { listLocalSessions: listSessions } = await import('../../session/local-sessions.js');
       const localSession = listSessions(50).find((s: any) => s.projectName === binding.projectName);
       if (localSession) {
+        logger.info({ projectName: binding.projectName, cwd: localSession.cwd }, 'resolveGroupProject: found local CLI project');
         return { projectName: binding.projectName, projectPath: localSession.cwd };
       }
+      logger.warn({ projectName: binding.projectName }, 'resolveGroupProject: local CLI project not found in sessions');
     }
   }
   const { path: groupDir, projectName } = projectManager.ensureGroupDefault(chatId);
@@ -738,6 +740,7 @@ async function handleClaudeTask(
       return;
     }
     session = sessionManager.getOrCreateGroup(ctx.chatId, ctx.threadId, projectName);
+    logger.info({ projectName, projectPath, sessionId: session.claude_session_id, chatType: 'group', threadId: ctx.threadId }, 'handleClaudeTask: group session resolved');
   } else {
     // P2P: existing per-user logic
     const user = db.getUser(ctx.senderId);

@@ -17,11 +17,10 @@ const CARDKIT_THROTTLE_MS = 100;
 const IM_THROTTLE_MS = 1500;
 
 /** CardKit 2.0 initial card with streaming_mode and loading icon */
-function buildStreamingThinkingCard(mentionTarget?: MentionTarget | null): object {
+function buildStreamingThinkingCard(_mentionTarget?: MentionTarget | null): object {
+  // Note: CardKit 2.0 streaming cards don't support <at> in initial creation.
+  // Mention is added in the final card (done/error/cancelled) via CardBuilder.
   const elements: any[] = [];
-  if (mentionTarget) {
-    elements.push({ tag: 'markdown', content: `<at id=${mentionTarget.userId}></at>`, text_align: 'left' });
-  }
   elements.push({ tag: 'markdown', content: '', text_align: 'left', element_id: STREAMING_ELEMENT_ID });
   return {
     schema: '2.0',
