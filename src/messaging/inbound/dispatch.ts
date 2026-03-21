@@ -159,11 +159,25 @@ async function handleCommand(
     case 'status': {
       const user = db.getUser(ctx.senderId);
       const active = registry.getByUserId(ctx.senderId);
+      let projectDisplay: string;
+
+      if (ctx.chatType === 'group') {
+        // Group: show thread binding or group home
+        if (ctx.threadId) {
+          const binding = db.getThreadBinding(ctx.chatId, ctx.threadId);
+          projectDisplay = binding?.projectName || '群默认目录';
+        } else {
+          projectDisplay = '群默认目录';
+        }
+      } else {
+        projectDisplay = user?.active_project || '个人目录';
+      }
+
       const lines = [
-        `📁 项目: ${user?.active_project || '个人目录'}`,
+        `📁 项目: ${projectDisplay}`,
         `⚡ 任务: ${active ? '执行中' : '空闲'}`,
       ];
-      if (user?.resumed_session_id) {
+      if (ctx.chatType !== 'group' && user?.resumed_session_id) {
         const shortId = user.resumed_session_id.slice(0, 8);
         const projectName = user.resumed_cwd?.split('/').pop() || '未知';
         lines.push(`🔄 恢复会话: ${shortId} (${projectName})`);
