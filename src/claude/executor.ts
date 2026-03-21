@@ -37,8 +37,10 @@ function getLocalPlugins(): Array<{ type: 'local'; path: string }> {
 
 export interface ExecutionCallbacks {
   onText: (fullText: string) => void;
-  onToolStart: (tool: string, detail: string) => void;
-  onToolEnd: (tool: string, detail: string) => void;
+  onThinkingUpdate: (isThinking: boolean, content: string, elapsedMs: number) => void;
+  onToolStart: (toolUseId: string, tool: string, detail: string) => void;
+  onToolEnd: (toolUseId: string, resultSummary: string) => void;
+  onToolProgress: (toolUseId: string, toolName: string, elapsed: number) => void;
   onComplete: (result: ExecutionResult) => void;
   onError: (error: string) => void;
   onPermissionRequest: (toolName: string, input: Record<string, unknown>) => Promise<boolean>;
@@ -147,8 +149,12 @@ export async function executeClaudeTask(
             // For display: during reasoning show inline indicator, otherwise strip tags
             if (isInReasoning) {
               const thinkContent = extractThinkingContent(fullText);
+              callbacks.onThinkingUpdate(true, thinkContent, reasoningStartTime ? Date.now() - reasoningStartTime : 0);
               callbacks.onText(`💭 **Thinking...**\n\n${thinkContent}`);
             } else {
+              if (wasInReasoning) {
+                callbacks.onThinkingUpdate(false, '', reasoningElapsedMs);
+              }
               callbacks.onText(stripThinkingTags(fullText));
             }
           }
@@ -167,25 +173,36 @@ export async function executeClaudeTask(
                 const input = block.input as Record<string, unknown> | undefined;
                 const detail =
                   (input?.command ?? input?.file_path ?? input?.pattern ?? block.name) as string;
-                callbacks.onToolStart(block.name, String(detail));
+                callbacks.onToolStart(block.id, block.name, String(detail));
               }
             }
           }
           break;
         }
         case 'user': {
-          // Tool results arrive as user messages; signal tool completion
           const content = message.message?.content;
           if (Array.isArray(content)) {
             for (const block of content) {
-              if (
-                typeof block === 'object' &&
-                block !== null &&
-                (block as Record<string, unknown>).type === 'tool_result'
-              ) {
-                callbacks.onToolEnd('tool', 'completed');
+              if (typeof block === 'object' && block !== null && (block as any).type === 'tool_result') {
+                const toolUseId = (block as any).tool_use_id || '';
+                const resultContent = (block as any).content;
+                let summary = 'done';
+                if (typeof resultContent === 'string') {
+                  summary = resultContent.slice(0, 80);
+                } else if (Array.isArray(resultContent)) {
+                  const textBlock = resultContent.find((b: any) => b.type === 'text');
+                  if (textBlock?.text) summary = textBlock.text.slice(0, 80);
+                }
+                callbacks.onToolEnd(toolUseId, summary);
               }
             }
+          }
+          break;
+        }
+        case 'tool_progress' as any: {
+          const msg = message as any;
+          if (msg.tool_use_id && msg.tool_name) {
+            callbacks.onToolProgress(msg.tool_use_id, msg.tool_name, msg.elapsed_time_seconds ?? 0);
           }
           break;
         }

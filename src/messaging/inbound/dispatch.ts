@@ -848,13 +848,15 @@ async function handleClaudeTask(
 
   await executeClaudeTask(prompt, projectPath, effectiveSessionId, abortController, {
     onText: (fullText) => { void card.scheduleStreamText(fullText); },
-    onToolStart: (tool, detail) => {
+    onThinkingUpdate: (_isThinking, _content, _elapsedMs) => { /* handled via onText for now */ },
+    onToolStart: (_toolUseId, tool, detail) => {
       tools.push({ tool, status: 'running', detail });
     },
-    onToolEnd: (tool, _detail) => {
-      const match = tools.find(t => t.tool === tool && t.status === 'running') || tools.find(t => t.status === 'running');
+    onToolEnd: (_toolUseId, _resultSummary) => {
+      const match = tools.find(t => t.status === 'running');
       if (match) match.status = 'done';
     },
+    onToolProgress: (_toolUseId, _toolName, _elapsed) => { /* will be wired in Task 2 */ },
     onPermissionRequest: async (toolName, input) => {
       // Queue: serialize permission requests, show one at a time on one card
       const result = new Promise<boolean>((resolve) => {
