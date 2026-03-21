@@ -95,7 +95,8 @@ async function handleCommand(
         '/auth — 授权飞书账号（文档读写）', '',
         '🖥️ 本地会话：',
         '/session list — 列出本地 Claude Code 会话',
-        '/session resume <ID> — 恢复指定会话', '',
+        '/session resume <ID> — 恢复指定会话',
+        '/session exit — 退出恢复模式', '',
         '直接发送文字即可与 Claude Code 对话。',
         '无需设置项目，系统会自动为你创建独立的工作目录。',
       ];
@@ -115,8 +116,7 @@ async function handleCommand(
       const user = db.getUser(ctx.senderId);
       const project = user?.active_project || DEFAULT_PROJECT_LABEL;
       sessionManager.reset(ctx.senderId, ctx.threadId, project);
-      db.clearResumedSession(ctx.senderId);
-      await reply('Session reset.');
+      await reply('对话上下文已重置。');
       break;
     }
     case 'cancel':
@@ -271,12 +271,23 @@ async function handleCommand(
           }
           lines.push('');
         }
-        lines.push('会话已恢复，可以继续对话。发送 /reset 可退出恢复模式。');
+        lines.push('会话已恢复，可以继续对话。发送 /session exit 可退出恢复模式。');
         await reply(lines.join('\n'));
         return;
       }
 
-      await reply('用法: /session list 或 /session resume <ID>');
+      if (cmd.action === 'exit') {
+        const user = db.getUser(ctx.senderId);
+        if (user?.resumed_session_id) {
+          db.clearResumedSession(ctx.senderId);
+          await reply('已退出恢复模式，回到正常会话。');
+        } else {
+          await reply('当前没有恢复的会话。');
+        }
+        return;
+      }
+
+      await reply('用法: /session list | resume <ID> | exit');
       return;
     }
   }
