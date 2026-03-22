@@ -11,6 +11,8 @@ import { assertOk, toToolResult, type WithTokenFn } from './feishu-oapi.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
+const SMALL_FILE_THRESHOLD = 15 * 1024 * 1024; // 15MB — files larger than this use chunked upload
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -211,8 +213,6 @@ export async function handleDriveFile(
         };
       }
 
-      const SMALL_FILE_THRESHOLD = 15 * 1024 * 1024; // 15MB
-
       if (fileSize <= SMALL_FILE_THRESHOLD) {
         const res = await (client.drive.file as any).uploadAll(
           {
@@ -233,7 +233,6 @@ export async function handleDriveFile(
           size: fileSize,
         };
       } else {
-        // Chunked upload for files > 15MB
         const prepareRes = await (client.drive.file as any).uploadPrepare(
           {
             data: {

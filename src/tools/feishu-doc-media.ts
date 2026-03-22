@@ -132,7 +132,6 @@ async function handleInsert(
   const config = MEDIA_CONFIG[mediaType];
   const filePath = p.file_path;
 
-  // 1. Read and validate local file
   let fileSize: number;
   try {
     const stat = await fs.stat(filePath);
@@ -151,7 +150,20 @@ async function handleInsert(
 
   const fileName = path.basename(filePath);
 
-  // 2. Create empty block appended to document
+  // Detect image dimensions before upload to avoid reading the file twice
+  let imgWidth: number | undefined;
+  let imgHeight: number | undefined;
+  if (mediaType === 'image') {
+    try {
+      const imgBuf = await fs.readFile(filePath);
+      const dims = imageSize(imgBuf);
+      if (dims.width && dims.height) {
+        imgWidth = dims.width;
+        imgHeight = dims.height;
+      }
+    } catch { /* dimensions are optional */ }
+  }
+
   const createRes = await (client.docx.documentBlockChildren as any).create(
     {
       path: {
@@ -183,7 +195,6 @@ async function handleInsert(
     };
   }
 
-  // 3. Upload media
   const uploadRes = await (client.drive.v1.media as any).uploadAll(
     {
       data: {
@@ -205,26 +216,14 @@ async function handleInsert(
     };
   }
 
-  // 4. Patch block - set token
   const patchRequest: Record<string, unknown> = { block_id: blockId };
   if (mediaType === 'image') {
     const alignNum = ALIGN_MAP[p.align ?? 'center'];
-    // Detect image dimensions
-    let width: number | undefined;
-    let height: number | undefined;
-    try {
-      const imgBuf = await fs.readFile(filePath);
-      const dims = imageSize(imgBuf);
-      if (dims.width && dims.height) {
-        width = dims.width;
-        height = dims.height;
-      }
-    } catch { /* ignore — dimensions are optional */ }
     patchRequest.replace_image = {
       token: fileToken,
       align: alignNum,
-      ...(width != null ? { width } : {}),
-      ...(height != null ? { height } : {}),
+      ...(imgWidth != null ? { width: imgWidth } : {}),
+      ...(imgHeight != null ? { height: imgHeight } : {}),
       ...(p.caption ? { caption: { content: p.caption } } : {}),
     };
   } else {
