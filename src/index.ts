@@ -11,9 +11,9 @@ import { join } from 'path';
 
 async function main(): Promise<void> {
   const config = loadConfig();
-  logger.info({ workspaceDir: config.workspaceDir }, 'Starting remote-control');
+  logger.info({ workspaceDir: config.workspaceDir }, 'Starting codelark');
 
-  const dbPath = join(config.workspaceDir, 'remote-control.db');
+  const dbPath = join(config.workspaceDir, 'codelark.db');
   const db = new Database(dbPath);
   const sessionManager = new SessionManager(db);
   const projectManager = new ProjectManager(config.workspaceDir);
@@ -34,7 +34,7 @@ async function main(): Promise<void> {
   });
 
   startWebSocket(dispatcher);
-  logger.info('remote-control is ready');
+  logger.info('codelark is ready');
 
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutting down...');

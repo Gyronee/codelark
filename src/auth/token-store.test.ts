@@ -3,7 +3,7 @@ import { Database, OAuthToken } from '../session/db.js';
 import { getValidAccessToken, NeedAuthorizationError } from './token-store.js';
 import { existsSync, unlinkSync } from 'fs';
 
-const TEST_DB = '/tmp/remote-control-token-store-test.db';
+const TEST_DB = '/tmp/codelark-token-store-test.db';
 
 function makeToken(overrides: Partial<OAuthToken> = {}): OAuthToken {
   return {

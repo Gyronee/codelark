@@ -1,4 +1,23 @@
 node_modules/
 dist/
 .env
+.env.*
+!.env.example
 *.db
+*.db-wal
+*.db-shm
+
+# Runtime directories
+_uploads/
+workspaces/
+tmp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

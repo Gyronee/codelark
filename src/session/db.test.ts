@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Database, OAuthToken } from './db.js';
 import { existsSync, unlinkSync } from 'fs';
 
-const TEST_DB = '/tmp/remote-control-test.db';
+const TEST_DB = '/tmp/codelark-test.db';
 
 describe('Database', () => {
   let db: Database;

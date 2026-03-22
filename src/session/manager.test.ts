@@ -3,7 +3,7 @@ import { SessionManager } from './manager.js';
 import { Database } from './db.js';
 import { existsSync, unlinkSync } from 'fs';
 
-const TEST_DB = '/tmp/remote-control-session-test.db';
+const TEST_DB = '/tmp/codelark-session-test.db';
 
 describe('SessionManager', () => {
   let db: Database;

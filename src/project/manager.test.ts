@@ -4,7 +4,7 @@ import { readConfig } from './config.js';
 import { mkdirSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
 
-const TEST_WORKSPACE = '/tmp/remote-control-test-workspace';
+const TEST_WORKSPACE = '/tmp/codelark-test-workspace';
 
 describe('ProjectManager', () => {
   let pm: ProjectManager;
