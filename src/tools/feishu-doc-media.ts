@@ -7,8 +7,7 @@
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import type * as lark from '@larksuiteoapi/node-sdk';
-import { assertOk } from './feishu-oapi.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { assertOk, toToolResult, type WithTokenFn } from './feishu-oapi.js';
 import * as fs from 'fs/promises';
 import { createReadStream } from 'fs';
 import * as path from 'path';
@@ -165,7 +164,7 @@ async function handleInsert(
     },
     { userAccessToken },
   );
-  assertOk(createRes as any);
+  assertOk(createRes);
 
   // File Block returns View Block (block_type: 33) as wrapper;
   // actual File Block ID is in children[0].children[0].
@@ -226,7 +225,7 @@ async function handleInsert(
     },
     { userAccessToken },
   );
-  assertOk(patchRes as any);
+  assertOk(patchRes);
 
   return {
     success: true,
@@ -300,10 +299,7 @@ async function handleDownload(
 // Tool factory
 // ---------------------------------------------------------------------------
 
-export function createDocMediaTool(
-  withTokenFn: (action: (token: string) => Promise<CallToolResult>) => Promise<CallToolResult>,
-  client: lark.Client,
-) {
+export function createDocMediaTool(withTokenFn: WithTokenFn, client: lark.Client) {
   return tool(
     'feishu_doc_media',
     '【以用户身份】飞书文档媒体管理工具。' +
@@ -349,9 +345,6 @@ export function createDocMediaTool(
         ),
     },
     async (args) =>
-      withTokenFn(async (token) => {
-        const result = await handleDocMedia(args as DocMediaParams, token, client);
-        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
-      }),
+      withTokenFn(async (token) => toToolResult(await handleDocMedia(args as DocMediaParams, token, client))),
   );
 }

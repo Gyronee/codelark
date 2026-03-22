@@ -9,8 +9,7 @@
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import type * as lark from '@larksuiteoapi/node-sdk';
-import { assertOk } from './feishu-oapi.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { assertOk, toToolResult, type WithTokenFn } from './feishu-oapi.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -78,7 +77,7 @@ export async function handleWikiSpace(
         },
         { userAccessToken },
       );
-      assertOk(res as any);
+      assertOk(res);
       const data = res.data;
       return {
         spaces: data?.items,
@@ -96,7 +95,7 @@ export async function handleWikiSpace(
         { path: { space_id: params.space_id } },
         { userAccessToken },
       );
-      assertOk(res as any);
+      assertOk(res);
       return { space: res.data?.space };
     }
 
@@ -113,7 +112,7 @@ export async function handleWikiSpace(
         },
         { userAccessToken },
       );
-      assertOk(res as any);
+      assertOk(res);
       return { space: res.data?.space };
     }
   }
@@ -141,7 +140,7 @@ export async function handleWikiSpaceNode(
         },
         { userAccessToken },
       );
-      assertOk(res as any);
+      assertOk(res);
       const data = res.data;
       return {
         nodes: data?.items,
@@ -164,7 +163,7 @@ export async function handleWikiSpaceNode(
         },
         { userAccessToken },
       );
-      assertOk(res as any);
+      assertOk(res);
       return { node: res.data?.node };
     }
 
@@ -186,7 +185,7 @@ export async function handleWikiSpaceNode(
         },
         { userAccessToken },
       );
-      assertOk(res as any);
+      assertOk(res);
       return { node: res.data?.node };
     }
 
@@ -208,7 +207,7 @@ export async function handleWikiSpaceNode(
         },
         { userAccessToken },
       );
-      assertOk(res as any);
+      assertOk(res);
       return { node: res.data?.node };
     }
 
@@ -232,7 +231,7 @@ export async function handleWikiSpaceNode(
         },
         { userAccessToken },
       );
-      assertOk(res as any);
+      assertOk(res);
       return { node: res.data?.node };
     }
   }
@@ -242,10 +241,7 @@ export async function handleWikiSpaceNode(
 // Tool factories
 // ---------------------------------------------------------------------------
 
-export function createWikiSpaceTool(
-  withTokenFn: (action: (token: string) => Promise<CallToolResult>) => Promise<CallToolResult>,
-  client: lark.Client,
-) {
+export function createWikiSpaceTool(withTokenFn: WithTokenFn, client: lark.Client) {
   return tool(
     'feishu_wiki_space',
     '飞书知识空间管理工具。当用户要求查看知识库列表、获取知识库信息、创建知识库时使用。' +
@@ -267,17 +263,11 @@ export function createWikiSpaceTool(
       page_token: z.string().optional().describe('分页标记。首次请求无需填写'),
     },
     async (args) =>
-      withTokenFn(async (token) => {
-        const result = await handleWikiSpace(args as WikiSpaceParams, token, client);
-        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
-      }),
+      withTokenFn(async (token) => toToolResult(await handleWikiSpace(args as WikiSpaceParams, token, client))),
   );
 }
 
-export function createWikiSpaceNodeTool(
-  withTokenFn: (action: (token: string) => Promise<CallToolResult>) => Promise<CallToolResult>,
-  client: lark.Client,
-) {
+export function createWikiSpaceNodeTool(withTokenFn: WithTokenFn, client: lark.Client) {
   return tool(
     'feishu_wiki_space_node',
     '飞书知识库节点管理工具。操作：list（列表）、get（获取）、create（创建）、move（移动）、copy（复制）。' +
@@ -303,9 +293,6 @@ export function createWikiSpaceNodeTool(
       page_token: z.string().optional().describe('分页标记'),
     },
     async (args) =>
-      withTokenFn(async (token) => {
-        const result = await handleWikiSpaceNode(args as WikiSpaceNodeParams, token, client);
-        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
-      }),
+      withTokenFn(async (token) => toToolResult(await handleWikiSpaceNode(args as WikiSpaceNodeParams, token, client))),
   );
 }

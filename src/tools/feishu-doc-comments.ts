@@ -7,8 +7,7 @@
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import type * as lark from '@larksuiteoapi/node-sdk';
-import { assertOk } from './feishu-oapi.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { assertOk, toToolResult, type WithTokenFn } from './feishu-oapi.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -77,7 +76,7 @@ export async function handleDocComments(
       { params: { token: params.file_token, obj_type: 'wiki' } },
       { userAccessToken },
     );
-    assertOk(wikiNodeRes as any);
+    assertOk(wikiNodeRes);
     const node = wikiNodeRes.data?.node;
     if (!node || !node.obj_token || !node.obj_type) {
       return {
@@ -107,15 +106,13 @@ export async function handleDocComments(
       },
       { userAccessToken },
     );
-    assertOk(res as any);
+    assertOk(res);
     const items: any[] = res.data?.items ?? [];
 
     // Fetch full reply list for each comment that has replies
     const assembledItems = await Promise.all(
       items.map(async (comment: any) => {
-        if (
-          (comment.reply_list?.replies?.length > 0 || comment.has_more)
-        ) {
+        if (comment.reply_list?.replies?.length > 0) {
           try {
             const replies: unknown[] = [];
             let pageToken: string | undefined = undefined;
@@ -184,7 +181,7 @@ export async function handleDocComments(
       },
       { userAccessToken },
     );
-    assertOk(res as any);
+    assertOk(res);
     return res.data;
   }
 
@@ -206,7 +203,7 @@ export async function handleDocComments(
       },
       { userAccessToken },
     );
-    assertOk(res as any);
+    assertOk(res);
     return { success: true };
   }
 
@@ -217,10 +214,7 @@ export async function handleDocComments(
 // Tool factory
 // ---------------------------------------------------------------------------
 
-export function createDocCommentsTool(
-  withTokenFn: (action: (token: string) => Promise<CallToolResult>) => Promise<CallToolResult>,
-  client: lark.Client,
-) {
+export function createDocCommentsTool(withTokenFn: WithTokenFn, client: lark.Client) {
   return tool(
     'feishu_doc_comments',
     '【以用户身份】管理云文档评论。支持: ' +
@@ -264,9 +258,6 @@ export function createDocCommentsTool(
         .describe('解决状态：true=解决，false=恢复（action=patch 时必填）'),
     },
     async (args) =>
-      withTokenFn(async (token) => {
-        const result = await handleDocComments(args as DocCommentsParams, token, client);
-        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
-      }),
+      withTokenFn(async (token) => toToolResult(await handleDocComments(args as DocCommentsParams, token, client))),
   );
 }

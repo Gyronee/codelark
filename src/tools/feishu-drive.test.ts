@@ -351,7 +351,7 @@ describe('handleDriveFile', () => {
 
     const call = mockClient.drive.file.uploadAll.mock.calls[0][0];
     expect(call.data.file_name).toBe('custom.bin');
-    expect(call.data.size).toBe(999);
+    expect(call.data.size).toBe(fileContent.length);
     expect(result.file_name).toBe('custom.bin');
   });
 

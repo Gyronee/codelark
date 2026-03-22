@@ -1,7 +1,6 @@
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { callFeishuOapi, assertOk } from './feishu-oapi.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { callFeishuOapi, assertOk, toToolResult, type WithTokenFn } from './feishu-oapi.js';
 
 const FilterSchema = z.object({
   creator_ids: z.array(z.string()).max(20).optional().describe('创建者 OpenID 列表'),
@@ -92,7 +91,7 @@ export async function handleSearch(params: SearchParams, userAccessToken: string
     userAccessToken,
   });
   assertOk(res);
-  const data = res.data || {};
+  const data = (res.data ?? {}) as Record<string, any>;
 
   return {
     total: data.total ?? 0,
@@ -102,9 +101,7 @@ export async function handleSearch(params: SearchParams, userAccessToken: string
   };
 }
 
-export function createSearchTool(
-  withTokenFn: (action: (token: string) => Promise<CallToolResult>) => Promise<CallToolResult>,
-) {
+export function createSearchTool(withTokenFn: WithTokenFn) {
   return tool(
     'feishu_search_doc_wiki',
     '飞书文档与 Wiki 统一搜索。同时搜索云空间文档和知识库 Wiki。' +
@@ -117,9 +114,6 @@ export function createSearchTool(
       page_size: z.number().int().min(0).max(20).optional().describe('分页大小（默认 15，最大 20）'),
     },
     async (args) =>
-      withTokenFn(async (token) => {
-        const result = await handleSearch(args, token);
-        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
-      }),
+      withTokenFn(async (token) => toToolResult(await handleSearch(args, token))),
   );
 }

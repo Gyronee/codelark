@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { callFeishuOapi, assertOk, createLarkClient } from './feishu-oapi.js';
+import { callFeishuOapi, assertOk, createLarkClient, toToolResult } from './feishu-oapi.js';
 
 describe('callFeishuOapi', () => {
   beforeEach(() => { vi.restoreAllMocks(); });
@@ -66,7 +66,7 @@ describe('callFeishuOapi', () => {
 
 describe('assertOk', () => {
   it('does nothing when code is 0', () => {
-    expect(() => assertOk({ code: 0, msg: 'success', data: {} })).not.toThrow();
+    expect(() => assertOk({ code: 0, msg: 'success' })).not.toThrow();
   });
 
   it('throws when code is non-zero', () => {
@@ -75,6 +75,15 @@ describe('assertOk', () => {
 
   it('includes error code in message', () => {
     expect(() => assertOk({ code: 40003, msg: 'forbidden' })).toThrow('40003');
+  });
+});
+
+describe('toToolResult', () => {
+  it('wraps result as CallToolResult with JSON text', () => {
+    const result = toToolResult({ foo: 'bar' });
+    expect(result.content).toHaveLength(1);
+    expect(result.content[0].type).toBe('text');
+    expect(JSON.parse((result.content[0] as any).text)).toEqual({ foo: 'bar' });
   });
 });
 

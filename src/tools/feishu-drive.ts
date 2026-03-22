@@ -7,8 +7,7 @@
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import type * as lark from '@larksuiteoapi/node-sdk';
-import { assertOk } from './feishu-oapi.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { assertOk, toToolResult, type WithTokenFn } from './feishu-oapi.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -73,7 +72,7 @@ export async function handleDriveFile(
         },
         { userAccessToken },
       );
-      assertOk(res as any);
+      assertOk(res);
       const data = res.data;
       return {
         files: data?.files,
@@ -99,7 +98,7 @@ export async function handleDriveFile(
         },
         { userAccessToken },
       );
-      assertOk(res as any);
+      assertOk(res);
       return {
         metas: res.data?.metas ?? [],
       };
@@ -124,7 +123,7 @@ export async function handleDriveFile(
         },
         { userAccessToken },
       );
-      assertOk(res as any);
+      assertOk(res);
       return {
         file: res.data?.file,
       };
@@ -147,7 +146,7 @@ export async function handleDriveFile(
         },
         { userAccessToken },
       );
-      assertOk(res as any);
+      assertOk(res);
       return {
         success: true,
         task_id: res.data?.task_id,
@@ -171,7 +170,7 @@ export async function handleDriveFile(
         },
         { userAccessToken },
       );
-      assertOk(res as any);
+      assertOk(res);
       return {
         success: true,
         task_id: res.data?.task_id,
@@ -191,7 +190,7 @@ export async function handleDriveFile(
         try {
           fileBuffer = await fs.readFile(p.file_path);
           fileName = p.file_name || path.basename(p.file_path);
-          fileSize = p.size || fileBuffer.length;
+          fileSize = fileBuffer.length;
         } catch (err) {
           return {
             error: `failed to read local file: ${err instanceof Error ? err.message : String(err)}`,
@@ -224,7 +223,7 @@ export async function handleDriveFile(
         },
         { userAccessToken },
       );
-      assertOk(res as any);
+      assertOk(res);
       return {
         file_token: res.data?.file_token,
         file_name: fileName,
@@ -278,10 +277,7 @@ export async function handleDriveFile(
 // Tool factory
 // ---------------------------------------------------------------------------
 
-export function createDriveFileTool(
-  withTokenFn: (action: (token: string) => Promise<CallToolResult>) => Promise<CallToolResult>,
-  client: lark.Client,
-) {
+export function createDriveFileTool(withTokenFn: WithTokenFn, client: lark.Client) {
   return tool(
     'feishu_drive_file',
     '【以用户身份】飞书云空间文件管理工具。当用户要求查看云空间(云盘)中的文件列表、获取文件信息、复制/移动/删除文件、上传/下载文件时使用。消息中的文件读写**禁止**使用该工具！' +
@@ -355,9 +351,6 @@ export function createDriveFileTool(
         .describe("本地保存路径（download 时可选，如 '/tmp/file.pdf'）。不提供则返回 Base64"),
     },
     async (args) =>
-      withTokenFn(async (token) => {
-        const result = await handleDriveFile(args as DriveFileParams, token, client);
-        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
-      }),
+      withTokenFn(async (token) => toToolResult(await handleDriveFile(args as DriveFileParams, token, client))),
   );
 }
