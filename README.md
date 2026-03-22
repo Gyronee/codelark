@@ -59,6 +59,54 @@ CodeLark connects [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 
 - **OAuth token management** — Auto-refresh with transient error retry, 60s expiration buffer
 - **Graceful shutdown** — SIGINT/SIGTERM handling, abort all active tasks, wait for in-flight updates
 
+## Concepts
+
+CodeLark has three core concepts you need to understand:
+
+### Working Directory
+
+Every conversation with Claude operates inside a directory on the server. Claude can read, write, and execute commands within this directory — just like using Claude Code locally.
+
+- **DM (no project selected)** — You get a personal default directory (`users/<your_id>/`), auto-created on first use
+- **Group thread (no project bound)** — The thread gets a group default directory (`groups/<chat_id>/`), shared across all threads in that group
+- **With a project selected** — Claude works inside that project's directory
+
+### Projects
+
+A project is a **named working directory** that persists across conversations and can be shared with other users.
+
+```
+/project create my-app        # Create an empty project (git-initialized)
+/project clone https://...    # Clone a repo as a project
+/project use my-app           # Switch to a project (DM only)
+/project list                 # List available projects
+/project grant my-app ou_xxx  # Grant access to another user
+```
+
+**In DMs**, you switch projects with `/project use`. Your selection persists — next time you message the bot, you're still in the same project.
+
+**In group threads**, the project is bound to the thread. The first `/project use` in a thread locks it — this cannot be changed later, ensuring the thread's conversation history stays consistent with its working directory.
+
+### Sessions
+
+A session is the **conversation context** (chat history) that Claude remembers.
+
+- **Bot sessions** — Created automatically. In DMs, one session per user per project. In groups, one session per thread. Use `/new` to clear context and start fresh.
+- **CLI sessions** — If you also use Claude Code locally, you can resume a local CLI session in Feishu with `/session resume <id>`. This lets you continue a task you started in your terminal. Use `/session list` to see available local sessions, and `/session exit` to return to normal mode.
+
+### How it all fits together
+
+```
+DM conversation:
+  You → bot                      Uses your selected project (or personal default)
+                                 One session per project, /new to reset
+
+Group conversation:
+  Thread A → bound to my-app     Each thread has its own session
+  Thread B → bound to api-server Each thread can bind to a different project
+  Thread C → no project bound    Uses the group's default directory
+```
+
 ## Quick Start
 
 ### Prerequisites
