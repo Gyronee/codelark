@@ -12,6 +12,8 @@ import * as fs from 'fs/promises';
 import { createReadStream } from 'fs';
 import * as path from 'path';
 import { imageSize } from 'image-size';
+import { logger } from '../logger.js';
+const log = logger.child({ module: 'tools/feishu-doc-media' });
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -132,6 +134,8 @@ async function handleInsert(
   const config = MEDIA_CONFIG[mediaType];
   const filePath = p.file_path;
 
+  log.info({ action: 'insert', doc_id: documentId, file_path: filePath, type: mediaType }, 'doc_media action=insert');
+
   let fileSize: number;
   try {
     const stat = await fs.stat(filePath);
@@ -148,6 +152,7 @@ async function handleInsert(
     };
   }
 
+  log.info({ file_path: filePath, size: fileSize, type: mediaType }, 'doc_media insert file stat ok');
   const fileName = path.basename(filePath);
 
   // Detect image dimensions before upload to avoid reading the file twice
@@ -164,6 +169,7 @@ async function handleInsert(
     } catch { /* dimensions are optional */ }
   }
 
+  log.info({ doc_id: documentId, type: mediaType, block_type: config.block_type }, 'doc_media create block');
   const createRes = await (client.docx.documentBlockChildren as any).create(
     {
       path: {
@@ -195,6 +201,7 @@ async function handleInsert(
     };
   }
 
+  log.info({ block_id: blockId, file_name: fileName, size: fileSize }, 'doc_media block created, uploading media');
   const uploadRes = await (client.drive.v1.media as any).uploadAll(
     {
       data: {
@@ -216,6 +223,7 @@ async function handleInsert(
     };
   }
 
+  log.info({ file_token: fileToken, block_id: blockId }, 'doc_media media uploaded, patching block');
   const patchRequest: Record<string, unknown> = { block_id: blockId };
   if (mediaType === 'image') {
     const alignNum = ALIGN_MAP[p.align ?? 'center'];
@@ -240,6 +248,7 @@ async function handleInsert(
   );
   assertOk(patchRes);
 
+  log.info({ doc_id: documentId, block_id: blockId, file_token: fileToken, type: mediaType }, 'doc_media insert done');
   return {
     success: true,
     type: mediaType,
@@ -255,6 +264,7 @@ async function handleDownload(
   userAccessToken: string,
   client: lark.Client,
 ): Promise<unknown> {
+  log.info({ action: 'download', resource_type: p.resource_type, resource_token: p.resource_token, output_path: p.output_path }, 'doc_media action=download');
   let res: any;
   if (p.resource_type === 'media') {
     res = await (client.drive.v1.media as any).download(
@@ -299,6 +309,7 @@ async function handleDownload(
     };
   }
 
+  log.info({ resource_token: p.resource_token, saved_path: finalPath, size: buffer.length, content_type: contentType }, 'doc_media download saved');
   return {
     resource_type: p.resource_type,
     resource_token: p.resource_token,

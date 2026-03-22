@@ -10,6 +10,8 @@ import type * as lark from '@larksuiteoapi/node-sdk';
 import { assertOk, toToolResult, type WithTokenFn } from './feishu-oapi.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { logger } from '../logger.js';
+const log = logger.child({ module: 'tools/feishu-drive' });
 
 const SMALL_FILE_THRESHOLD = 15 * 1024 * 1024; // 15MB — files larger than this use chunked upload
 
@@ -62,6 +64,7 @@ export async function handleDriveFile(
     // LIST FILES
     // -------------------------------------------------------------------------
     case 'list': {
+      log.info({ action: 'list', folder_token: p.folder_token, page_size: p.page_size }, 'drive_file action=list');
       const res = await (client.drive.file as any).list(
         {
           params: {
@@ -76,6 +79,7 @@ export async function handleDriveFile(
       );
       assertOk(res);
       const data = res.data;
+      log.info({ count: data?.files?.length ?? 0, has_more: data?.has_more }, 'drive_file list done');
       return {
         files: data?.files,
         has_more: data?.has_more,
@@ -92,6 +96,7 @@ export async function handleDriveFile(
           error: "request_docs must be a non-empty array. Correct format: {action: 'get_meta', request_docs: [{doc_token: '...', doc_type: 'sheet'}]}",
         };
       }
+      log.info({ action: 'get_meta', count: p.request_docs.length }, 'drive_file action=get_meta');
       const res = await (client.drive.meta as any).batchQuery(
         {
           data: {
@@ -101,6 +106,7 @@ export async function handleDriveFile(
         { userAccessToken },
       );
       assertOk(res);
+      log.info({ count: res.data?.metas?.length ?? 0 }, 'drive_file get_meta done');
       return {
         metas: res.data?.metas ?? [],
       };
@@ -113,6 +119,7 @@ export async function handleDriveFile(
       if (!p.file_token) throw new Error('file_token is required for copy');
       if (!p.name) throw new Error('name is required for copy');
       if (!p.type) throw new Error('type is required for copy');
+      log.info({ action: 'copy', file_token: p.file_token, type: p.type, name: p.name }, 'drive_file action=copy');
       const targetFolderToken = p.folder_token || p.parent_node;
       const res = await (client.drive.file as any).copy(
         {
@@ -126,6 +133,7 @@ export async function handleDriveFile(
         { userAccessToken },
       );
       assertOk(res);
+      log.info({ file_token: (res.data?.file as any)?.token }, 'drive_file copy done');
       return {
         file: res.data?.file,
       };
@@ -138,6 +146,7 @@ export async function handleDriveFile(
       if (!p.file_token) throw new Error('file_token is required for move');
       if (!p.type) throw new Error('type is required for move');
       if (!p.folder_token) throw new Error('folder_token is required for move');
+      log.info({ action: 'move', file_token: p.file_token, type: p.type, folder_token: p.folder_token }, 'drive_file action=move');
       const res = await (client.drive.file as any).move(
         {
           path: { file_token: p.file_token },
@@ -149,6 +158,7 @@ export async function handleDriveFile(
         { userAccessToken },
       );
       assertOk(res);
+      log.info({ file_token: p.file_token, task_id: res.data?.task_id }, 'drive_file move done');
       return {
         success: true,
         task_id: res.data?.task_id,
@@ -163,6 +173,7 @@ export async function handleDriveFile(
     case 'delete': {
       if (!p.file_token) throw new Error('file_token is required for delete');
       if (!p.type) throw new Error('type is required for delete');
+      log.info({ action: 'delete', file_token: p.file_token, type: p.type }, 'drive_file action=delete');
       const res = await (client.drive.file as any).delete(
         {
           path: { file_token: p.file_token },
@@ -173,6 +184,7 @@ export async function handleDriveFile(
         { userAccessToken },
       );
       assertOk(res);
+      log.info({ file_token: p.file_token, task_id: res.data?.task_id }, 'drive_file delete done');
       return {
         success: true,
         task_id: res.data?.task_id,
@@ -188,11 +200,14 @@ export async function handleDriveFile(
       let fileName: string;
       let fileSize: number;
 
+      log.info({ action: 'upload', file_path: p.file_path, file_name: p.file_name }, 'drive_file action=upload');
+
       if (p.file_path) {
         try {
           fileBuffer = await fs.readFile(p.file_path);
           fileName = p.file_name || path.basename(p.file_path);
           fileSize = fileBuffer.length;
+          log.info({ file_name: fileName, size: fileSize }, 'drive_file upload file read from path');
         } catch (err) {
           return {
             error: `failed to read local file: ${err instanceof Error ? err.message : String(err)}`,
@@ -207,6 +222,7 @@ export async function handleDriveFile(
         fileBuffer = Buffer.from(p.file_content_base64, 'base64');
         fileName = p.file_name;
         fileSize = p.size;
+        log.info({ file_name: fileName, size: fileSize }, 'drive_file upload file from base64');
       } else {
         return {
           error: 'either file_path or file_content_base64 is required',
@@ -214,6 +230,7 @@ export async function handleDriveFile(
       }
 
       if (fileSize <= SMALL_FILE_THRESHOLD) {
+        log.info({ file_name: fileName, size: fileSize }, 'drive_file upload_all start');
         const res = await (client.drive.file as any).uploadAll(
           {
             data: {
@@ -227,12 +244,14 @@ export async function handleDriveFile(
           { userAccessToken },
         );
         assertOk(res);
+        log.info({ file_token: res.data?.file_token, file_name: fileName }, 'drive_file upload_all done');
         return {
           file_token: res.data?.file_token,
           file_name: fileName,
           size: fileSize,
         };
       } else {
+        log.info({ file_name: fileName, size: fileSize }, 'drive_file upload_prepare start');
         const prepareRes = await (client.drive.file as any).uploadPrepare(
           {
             data: {
@@ -246,11 +265,13 @@ export async function handleDriveFile(
         );
         assertOk(prepareRes);
         const { upload_id, block_size, block_num } = prepareRes.data;
+        log.info({ upload_id, block_num, block_size }, 'drive_file upload_prepare done');
 
         for (let seq = 0; seq < block_num; seq++) {
           const start = seq * block_size;
           const end = Math.min(start + block_size, fileSize);
           const chunkBuffer = fileBuffer.subarray(start, end);
+          log.info({ upload_id, seq, chunk_size: chunkBuffer.length, block_num }, 'drive_file upload_part');
           await (client.drive.file as any).uploadPart(
             {
               data: {
@@ -264,11 +285,13 @@ export async function handleDriveFile(
           );
         }
 
+        log.info({ upload_id, block_num }, 'drive_file upload_finish start');
         const finishRes = await (client.drive.file as any).uploadFinish(
           { data: { upload_id, block_num } },
           { userAccessToken },
         );
         assertOk(finishRes);
+        log.info({ file_token: finishRes.data?.file_token, file_name: fileName, chunks: block_num }, 'drive_file upload_finish done');
         return {
           file_token: finishRes.data?.file_token,
           file_name: fileName,
@@ -284,6 +307,7 @@ export async function handleDriveFile(
     // -------------------------------------------------------------------------
     case 'download': {
       if (!p.file_token) throw new Error('file_token is required for download');
+      log.info({ action: 'download', file_token: p.file_token, output_path: p.output_path }, 'drive_file action=download');
       const res = await (client.drive.file as any).download(
         {
           path: { file_token: p.file_token },
@@ -297,11 +321,13 @@ export async function handleDriveFile(
         chunks.push(chunk as Buffer);
       }
       const fileBuffer = Buffer.concat(chunks);
+      log.info({ file_token: p.file_token, size: fileBuffer.length }, 'drive_file download stream read done');
 
       if (p.output_path) {
         try {
           await fs.mkdir(path.dirname(p.output_path), { recursive: true });
           await fs.writeFile(p.output_path, fileBuffer);
+          log.info({ saved_path: p.output_path, size: fileBuffer.length }, 'drive_file download saved');
           return {
             saved_path: p.output_path,
             size: fileBuffer.length,
@@ -312,6 +338,7 @@ export async function handleDriveFile(
           };
         }
       } else {
+        log.info({ file_token: p.file_token, size: fileBuffer.length }, 'drive_file download returning base64');
         return {
           file_content_base64: fileBuffer.toString('base64'),
           size: fileBuffer.length,
