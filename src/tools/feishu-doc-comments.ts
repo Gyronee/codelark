@@ -8,6 +8,8 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import type * as lark from '@larksuiteoapi/node-sdk';
 import { assertOk, toToolResult, type WithTokenFn } from './feishu-oapi.js';
+import { logger } from '../logger.js';
+const log = logger.child({ module: 'tools/feishu-doc-comments' });
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,11 +69,14 @@ export async function handleDocComments(
 ): Promise<unknown> {
   const userIdType = params.user_id_type ?? 'open_id';
 
+  log.info({ action: params.action, file_token: params.file_token, file_type: params.file_type }, 'doc_comments handler start');
+
   // Wiki token auto-conversion
   let actualFileToken = params.file_token;
   let actualFileType: string = params.file_type;
 
   if (params.file_type === 'wiki') {
+    log.info({ file_token: params.file_token }, 'doc_comments resolving wiki token');
     const wikiNodeRes = await (client.wiki.space as any).getNode(
       { params: { token: params.file_token, obj_type: 'wiki' } },
       { userAccessToken },
@@ -86,12 +91,14 @@ export async function handleDocComments(
     }
     actualFileToken = node.obj_token;
     actualFileType = node.obj_type;
+    log.info({ wiki_token: params.file_token, obj_token: actualFileToken, obj_type: actualFileType }, 'doc_comments wiki token resolved');
   }
 
   // -------------------------------------------------------------------------
   // LIST
   // -------------------------------------------------------------------------
   if (params.action === 'list') {
+    log.info({ file_token: actualFileToken, file_type: actualFileType, is_whole: params.is_whole, is_solved: params.is_solved }, 'doc_comments action=list');
     const res = await (client.drive.v1.fileComment as any).list(
       {
         path: { file_token: actualFileToken },
@@ -108,6 +115,7 @@ export async function handleDocComments(
     );
     assertOk(res);
     const items: any[] = res.data?.items ?? [];
+    log.info({ count: items.length, has_more: res.data?.has_more }, 'doc_comments list fetched');
 
     // Fetch full reply list for each comment that has replies
     const assembledItems = await Promise.all(
@@ -151,6 +159,7 @@ export async function handleDocComments(
       }),
     );
 
+    log.info({ count: assembledItems.length }, 'doc_comments list assembled with replies');
     return {
       items: assembledItems,
       has_more: res.data?.has_more ?? false,
@@ -165,6 +174,7 @@ export async function handleDocComments(
     if (!params.elements || params.elements.length === 0) {
       return { error: 'elements 参数必填且不能为空' };
     }
+    log.info({ file_token: actualFileToken, file_type: actualFileType, element_count: params.elements.length }, 'doc_comments action=create');
     const sdkElements = convertElementsToSDKFormat(params.elements);
     const res = await (client.drive.v1.fileComment as any).create(
       {
@@ -182,6 +192,7 @@ export async function handleDocComments(
       { userAccessToken },
     );
     assertOk(res);
+    log.info({ comment_id: (res.data as any)?.comment_id }, 'doc_comments comment created');
     return res.data;
   }
 
@@ -195,6 +206,7 @@ export async function handleDocComments(
     if (params.is_solved_value === undefined) {
       return { error: 'is_solved_value 参数必填' };
     }
+    log.info({ file_token: actualFileToken, comment_id: params.comment_id, is_solved: params.is_solved_value }, 'doc_comments action=patch');
     const res = await (client.drive.v1.fileComment as any).patch(
       {
         path: { file_token: actualFileToken, comment_id: params.comment_id },
@@ -204,6 +216,7 @@ export async function handleDocComments(
       { userAccessToken },
     );
     assertOk(res);
+    log.info({ comment_id: params.comment_id, is_solved: params.is_solved_value }, 'doc_comments patch done');
     return { success: true };
   }
 

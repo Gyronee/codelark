@@ -10,6 +10,8 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import type * as lark from '@larksuiteoapi/node-sdk';
 import { assertOk, toToolResult, type WithTokenFn } from './feishu-oapi.js';
+import { logger } from '../logger.js';
+const log = logger.child({ module: 'tools/feishu-wiki' });
 
 // ---------------------------------------------------------------------------
 // Types
@@ -68,6 +70,7 @@ export async function handleWikiSpace(
     // LIST SPACES
     // -----------------------------------------------------------------------
     case 'list': {
+      log.info({ action: 'list', page_size: params.page_size }, 'wiki_space action=list');
       const res = await (client.wiki.space as any).list(
         {
           params: {
@@ -79,6 +82,7 @@ export async function handleWikiSpace(
       );
       assertOk(res);
       const data = res.data;
+      log.info({ count: data?.items?.length ?? 0, has_more: data?.has_more }, 'wiki_space list done');
       return {
         spaces: data?.items,
         has_more: data?.has_more,
@@ -91,11 +95,13 @@ export async function handleWikiSpace(
     // -----------------------------------------------------------------------
     case 'get': {
       if (!params.space_id) throw new Error('space_id is required for get');
+      log.info({ action: 'get', space_id: params.space_id }, 'wiki_space action=get');
       const res = await (client.wiki.space as any).get(
         { path: { space_id: params.space_id } },
         { userAccessToken },
       );
       assertOk(res);
+      log.info({ space_id: params.space_id }, 'wiki_space get done');
       return { space: res.data?.space };
     }
 
@@ -103,6 +109,7 @@ export async function handleWikiSpace(
     // CREATE SPACE
     // -----------------------------------------------------------------------
     case 'create': {
+      log.info({ action: 'create', name: params.name }, 'wiki_space action=create');
       const res = await (client.wiki.space as any).create(
         {
           data: {
@@ -113,6 +120,8 @@ export async function handleWikiSpace(
         { userAccessToken },
       );
       assertOk(res);
+      const createdSpaceId = (res.data?.space as any)?.id;
+      log.info({ space_id: createdSpaceId }, 'wiki_space created');
       return { space: res.data?.space };
     }
   }
@@ -129,6 +138,7 @@ export async function handleWikiSpaceNode(
     // -----------------------------------------------------------------------
     case 'list': {
       if (!params.space_id) throw new Error('space_id is required for list');
+      log.info({ action: 'list', space_id: params.space_id, parent_node_token: params.parent_node_token }, 'wiki_space_node action=list');
       const res = await (client.wiki.spaceNode as any).list(
         {
           path: { space_id: params.space_id },
@@ -142,6 +152,7 @@ export async function handleWikiSpaceNode(
       );
       assertOk(res);
       const data = res.data;
+      log.info({ count: data?.items?.length ?? 0, has_more: data?.has_more }, 'wiki_space_node list done');
       return {
         nodes: data?.items,
         has_more: data?.has_more,
@@ -154,6 +165,7 @@ export async function handleWikiSpaceNode(
     // -----------------------------------------------------------------------
     case 'get': {
       if (!params.token) throw new Error('token is required for get');
+      log.info({ action: 'get', token: params.token, obj_type: params.obj_type }, 'wiki_space_node action=get');
       const res = await (client.wiki.space as any).getNode(
         {
           params: {
@@ -164,6 +176,7 @@ export async function handleWikiSpaceNode(
         { userAccessToken },
       );
       assertOk(res);
+      log.info({ token: params.token }, 'wiki_space_node get done');
       return { node: res.data?.node };
     }
 
@@ -172,6 +185,7 @@ export async function handleWikiSpaceNode(
     // -----------------------------------------------------------------------
     case 'create': {
       if (!params.space_id) throw new Error('space_id is required for create');
+      log.info({ action: 'create', space_id: params.space_id, obj_type: params.obj_type, title: params.title }, 'wiki_space_node action=create');
       const res = await (client.wiki.spaceNode as any).create(
         {
           path: { space_id: params.space_id },
@@ -186,6 +200,8 @@ export async function handleWikiSpaceNode(
         { userAccessToken },
       );
       assertOk(res);
+      const createdNodeToken = (res.data?.node as any)?.node_token;
+      log.info({ node_token: createdNodeToken }, 'wiki_space_node created');
       return { node: res.data?.node };
     }
 
@@ -195,6 +211,7 @@ export async function handleWikiSpaceNode(
     case 'move': {
       if (!params.space_id) throw new Error('space_id is required for move');
       if (!params.node_token) throw new Error('node_token is required for move');
+      log.info({ action: 'move', space_id: params.space_id, node_token: params.node_token, target_parent_token: params.target_parent_token }, 'wiki_space_node action=move');
       const res = await (client.wiki.spaceNode as any).move(
         {
           path: {
@@ -208,6 +225,7 @@ export async function handleWikiSpaceNode(
         { userAccessToken },
       );
       assertOk(res);
+      log.info({ node_token: params.node_token }, 'wiki_space_node move done');
       return { node: res.data?.node };
     }
 
@@ -217,6 +235,7 @@ export async function handleWikiSpaceNode(
     case 'copy': {
       if (!params.space_id) throw new Error('space_id is required for copy');
       if (!params.node_token) throw new Error('node_token is required for copy');
+      log.info({ action: 'copy', space_id: params.space_id, node_token: params.node_token, target_space_id: params.target_space_id }, 'wiki_space_node action=copy');
       const res = await (client.wiki.spaceNode as any).copy(
         {
           path: {
@@ -232,6 +251,8 @@ export async function handleWikiSpaceNode(
         { userAccessToken },
       );
       assertOk(res);
+      const copiedNodeToken = (res.data?.node as any)?.node_token;
+      log.info({ node_token: copiedNodeToken }, 'wiki_space_node copy done');
       return { node: res.data?.node };
     }
   }

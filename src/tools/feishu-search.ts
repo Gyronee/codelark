@@ -1,6 +1,8 @@
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { callFeishuOapi, assertOk, toToolResult, type WithTokenFn } from './feishu-oapi.js';
+import { logger } from '../logger.js';
+const log = logger.child({ module: 'tools/feishu-search' });
 
 const FilterSchema = z.object({
   creator_ids: z.array(z.string()).max(20).optional().describe('创建者 OpenID 列表'),
@@ -67,6 +69,7 @@ function normalizeTimestamps(value: unknown): unknown {
 
 export async function handleSearch(params: SearchParams, userAccessToken: string): Promise<SearchResult> {
   const query = params.query ?? '';
+  log.info({ query, hasFilter: !!params.filter, page_size: params.page_size }, 'search action=search');
   const requestData: Record<string, unknown> = {
     query,
     page_size: params.page_size,
@@ -93,12 +96,14 @@ export async function handleSearch(params: SearchParams, userAccessToken: string
   assertOk(res);
   const data = (res.data ?? {}) as Record<string, any>;
 
-  return {
+  const result = {
     total: data.total ?? 0,
     has_more: data.has_more ?? false,
     results: (normalizeTimestamps(data.res_units) as unknown[]) ?? [],
     page_token: data.page_token,
   };
+  log.info({ total: result.total, count: result.results.length, has_more: result.has_more }, 'search done');
+  return result;
 }
 
 export function createSearchTool(withTokenFn: WithTokenFn) {
