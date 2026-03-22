@@ -11,6 +11,7 @@ import { assertOk, toToolResult, type WithTokenFn } from './feishu-oapi.js';
 import * as fs from 'fs/promises';
 import { createReadStream } from 'fs';
 import * as path from 'path';
+import { imageSize } from 'image-size';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -208,9 +209,22 @@ async function handleInsert(
   const patchRequest: Record<string, unknown> = { block_id: blockId };
   if (mediaType === 'image') {
     const alignNum = ALIGN_MAP[p.align ?? 'center'];
+    // Detect image dimensions
+    let width: number | undefined;
+    let height: number | undefined;
+    try {
+      const imgBuf = await fs.readFile(filePath);
+      const dims = imageSize(imgBuf);
+      if (dims.width && dims.height) {
+        width = dims.width;
+        height = dims.height;
+      }
+    } catch { /* ignore — dimensions are optional */ }
     patchRequest.replace_image = {
       token: fileToken,
       align: alignNum,
+      ...(width != null ? { width } : {}),
+      ...(height != null ? { height } : {}),
       ...(p.caption ? { caption: { content: p.caption } } : {}),
     };
   } else {
