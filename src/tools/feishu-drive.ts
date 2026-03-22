@@ -211,24 +211,73 @@ export async function handleDriveFile(
         };
       }
 
-      const res = await (client.drive.file as any).uploadAll(
-        {
-          data: {
-            file_name: fileName,
-            parent_type: 'explorer',
-            parent_node: p.parent_node || '',
-            size: fileSize,
-            file: fileBuffer,
+      const SMALL_FILE_THRESHOLD = 15 * 1024 * 1024; // 15MB
+
+      if (fileSize <= SMALL_FILE_THRESHOLD) {
+        const res = await (client.drive.file as any).uploadAll(
+          {
+            data: {
+              file_name: fileName,
+              parent_type: 'explorer',
+              parent_node: p.parent_node || '',
+              size: fileSize,
+              file: fileBuffer,
+            },
           },
-        },
-        { userAccessToken },
-      );
-      assertOk(res);
-      return {
-        file_token: res.data?.file_token,
-        file_name: fileName,
-        size: fileSize,
-      };
+          { userAccessToken },
+        );
+        assertOk(res);
+        return {
+          file_token: res.data?.file_token,
+          file_name: fileName,
+          size: fileSize,
+        };
+      } else {
+        // Chunked upload for files > 15MB
+        const prepareRes = await (client.drive.file as any).uploadPrepare(
+          {
+            data: {
+              file_name: fileName,
+              parent_type: 'explorer',
+              parent_node: p.parent_node || '',
+              size: fileSize,
+            },
+          },
+          { userAccessToken },
+        );
+        assertOk(prepareRes);
+        const { upload_id, block_size, block_num } = prepareRes.data;
+
+        for (let seq = 0; seq < block_num; seq++) {
+          const start = seq * block_size;
+          const end = Math.min(start + block_size, fileSize);
+          const chunkBuffer = fileBuffer.subarray(start, end);
+          await (client.drive.file as any).uploadPart(
+            {
+              data: {
+                upload_id: String(upload_id),
+                seq: Number(seq),
+                size: Number(chunkBuffer.length),
+                file: chunkBuffer,
+              },
+            },
+            { userAccessToken },
+          );
+        }
+
+        const finishRes = await (client.drive.file as any).uploadFinish(
+          { data: { upload_id, block_num } },
+          { userAccessToken },
+        );
+        assertOk(finishRes);
+        return {
+          file_token: finishRes.data?.file_token,
+          file_name: fileName,
+          size: fileSize,
+          upload_method: 'chunked',
+          chunks_uploaded: block_num,
+        };
+      }
     }
 
     // -------------------------------------------------------------------------

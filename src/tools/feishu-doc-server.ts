@@ -61,11 +61,15 @@ export function createFeishuDocServer(
 ) {
   const feishuDocCreate = tool(
     'feishu_doc_create',
-    'Create a Feishu document with the given title and markdown content.',
+    '创建飞书云文档。支持放置到文件夹、知识库节点或知识空间。folder_token/wiki_node/wiki_space 三者互斥。' +
+    '大文档创建可能是异步的，会返回 task_id，用同一工具传入 task_id 查询状态。',
     {
-      title: z.string().describe('Document title'),
-      markdown: z.string().describe('Document content in markdown format'),
-      folder_token: z.string().optional().describe('Optional folder token to place the document in'),
+      title: z.string().optional().describe('文档标题'),
+      markdown: z.string().optional().describe('Markdown 格式的文档内容'),
+      folder_token: z.string().optional().describe('父文件夹 token（与 wiki_node/wiki_space 互斥）'),
+      wiki_node: z.string().optional().describe('知识库节点 token 或 URL（在该节点下创建文档，与 folder_token/wiki_space 互斥）'),
+      wiki_space: z.string().optional().describe('知识空间 ID（特殊值 my_library 表示个人空间，与 folder_token/wiki_node 互斥）'),
+      task_id: z.string().optional().describe('异步任务 ID。传入时查询任务状态而非创建新文档'),
     },
     async (args) =>
       withToken(db, userId, appId, appSecret, async (token) => {
@@ -95,10 +99,11 @@ export function createFeishuDocServer(
 
   const feishuDocUpdate = tool(
     'feishu_doc_update',
-    'Update a Feishu document. Supports overwrite, append, replace, insert, and delete operations.',
+    '更新飞书云文档。支持 overwrite/append/replace_range/replace_all/insert_before/insert_after/delete_range 操作。' +
+    '大文档更新可能是异步的，会返回 task_id，用同一工具传入 task_id 查询状态。',
     {
-      doc_id: z.string().describe('The document ID to update'),
-      markdown: z.string().optional().describe('Markdown content for the update'),
+      doc_id: z.string().optional().describe('文档 ID 或 URL（未提供 task_id 时必填）'),
+      markdown: z.string().optional().describe('Markdown 内容'),
       mode: z
         .enum([
           'overwrite',
@@ -109,16 +114,17 @@ export function createFeishuDocServer(
           'insert_after',
           'delete_range',
         ])
-        .describe('The update mode'),
+        .describe('更新模式'),
       selection_with_ellipsis: z
         .string()
         .optional()
-        .describe('Content selection using ellipsis for range operations'),
+        .describe('定位表达式：开头内容...结尾内容（与 selection_by_title 二选一）'),
       selection_by_title: z
         .string()
         .optional()
-        .describe('Content selection by title/heading'),
-      new_title: z.string().optional().describe('New title for the document'),
+        .describe('标题定位：如 ## 章节标题（与 selection_with_ellipsis 二选一）'),
+      new_title: z.string().optional().describe('新的文档标题'),
+      task_id: z.string().optional().describe('异步任务 ID，用于查询任务状态'),
     },
     async (args) =>
       withToken(db, userId, appId, appSecret, async (token) => {
