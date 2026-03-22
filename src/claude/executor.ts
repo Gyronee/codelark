@@ -99,6 +99,12 @@ export async function executeClaudeTask(
           'mcp__feishu-docs__feishu_doc_create',
           'mcp__feishu-docs__feishu_doc_fetch',
           'mcp__feishu-docs__feishu_doc_update',
+          'mcp__feishu-docs__feishu_search_doc_wiki',
+          'mcp__feishu-docs__feishu_wiki_space',
+          'mcp__feishu-docs__feishu_wiki_space_node',
+          'mcp__feishu-docs__feishu_drive_file',
+          'mcp__feishu-docs__feishu_doc_media',
+          'mcp__feishu-docs__feishu_doc_comments',
         ],
         permissionMode: 'default',
         canUseTool: async (toolName, input, _options) => {

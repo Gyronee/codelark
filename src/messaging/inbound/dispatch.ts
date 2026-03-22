@@ -346,7 +346,16 @@ async function handleCommand(
       const { buildOAuthCard, buildOAuthSuccessCard, buildOAuthFailedCard } = await import('../../auth/oauth-card.js');
 
       try {
-        const scopes = 'docx:document:create docx:document:readonly docx:document:write_only';
+        const scopes = [
+          'docx:document:create',
+          'docx:document:readonly',
+          'docx:document:write_only',
+          'search:docs_wiki:readonly',
+          'wiki:wiki:readonly',
+          'wiki:wiki',
+          'drive:drive:readonly',
+          'drive:drive',
+        ].join(' ');
         const deviceAuth = await requestDeviceAuthorization(config.feishu.appId, config.feishu.appSecret, scopes);
         const card = buildOAuthCard(deviceAuth.verificationUriComplete, deviceAuth.userCode);
         const messageId = await sendCard(ctx.chatId, card, threadId, replyMsgId);
