@@ -895,7 +895,7 @@ async function handleClaudeTask(
         void card.updateThinking(elapsedMs > 0 ? `💭 思考完成${elapsed}` : '');
       }
     },
-    onToolStart: (toolUseId, tool, detail) => {
+    onToolStart: (toolUseId, tool, detail, _parentToolUseId) => {
       const idx = toolCalls.length;
       toolCalls.push({ toolUseId, name: tool, detail, status: 'running' });
       toolUseIdMap.set(toolUseId, idx);
@@ -918,6 +918,12 @@ async function handleClaudeTask(
         toolCalls[idx].elapsed = elapsed;
         void card.updateToolStatus(renderToolStatus(toolCalls));
       }
+    },
+    onAgentStart: (_toolUseId, _name) => {
+      // Agent sub-task started — no-op for now; Task 4 will wire this to ToolRenderState
+    },
+    onAgentEnd: (_toolUseId, _summary, _toolCount, _durationMs) => {
+      // Agent sub-task ended — no-op for now; Task 4 will wire this to ToolRenderState
     },
     onPermissionRequest: async (toolName, input) => {
       // Queue: serialize permission requests, show one at a time on one card

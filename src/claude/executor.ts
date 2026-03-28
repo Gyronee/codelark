@@ -38,9 +38,11 @@ function getLocalPlugins(): Array<{ type: 'local'; path: string }> {
 export interface ExecutionCallbacks {
   onText: (fullText: string) => void;
   onThinkingUpdate: (isThinking: boolean, content: string, elapsedMs: number) => void;
-  onToolStart: (toolUseId: string, tool: string, detail: string) => void;
+  onToolStart: (toolUseId: string, tool: string, detail: string, parentToolUseId: string | null) => void;
   onToolEnd: (toolUseId: string, resultSummary: string) => void;
   onToolProgress: (toolUseId: string, toolName: string, elapsed: number) => void;
+  onAgentStart: (toolUseId: string, name: string) => void;
+  onAgentEnd: (toolUseId: string, summary: string, toolCount: number, durationMs: number) => void;
   onComplete: (result: ExecutionResult) => void;
   onError: (error: string) => void;
   onPermissionRequest: (toolName: string, input: Record<string, unknown>) => Promise<boolean>;
@@ -172,14 +174,19 @@ export async function executeClaudeTask(
         case 'assistant': {
           // Complete assistant message — extract tool_use blocks
           const content = message.message?.content;
+          const parentId = (message as any).parent_tool_use_id ?? null;
           if (Array.isArray(content)) {
             for (const block of content) {
               if (block.type === 'tool_use') {
                 toolCount++;
                 const input = block.input as Record<string, unknown> | undefined;
+                if (block.name === 'Agent') {
+                  const agentDesc = (input?.description ?? input?.prompt ?? 'sub-agent') as string;
+                  callbacks.onAgentStart(block.id, agentDesc.slice(0, 60));
+                }
                 const detail =
                   (input?.command ?? input?.file_path ?? input?.pattern ?? block.name) as string;
-                callbacks.onToolStart(block.id, block.name, String(detail));
+                callbacks.onToolStart(block.id, block.name, String(detail), parentId);
               }
             }
           }
@@ -234,6 +241,19 @@ export async function executeClaudeTask(
             callbacks.onError(errorMsg);
           }
           return;
+        }
+        case 'system' as any: {
+          const msg = message as any;
+          if (msg.subtype === 'task_notification' && msg.tool_use_id) {
+            const status = msg.status as string;
+            const summary = msg.summary || '';
+            const toolUses = msg.usage?.tool_uses ?? 0;
+            const durationMs = msg.usage?.duration_ms ?? 0;
+            if (status === 'completed' || status === 'failed' || status === 'stopped') {
+              callbacks.onAgentEnd(msg.tool_use_id, summary, toolUses, durationMs);
+            }
+          }
+          break;
         }
         default:
           logger.debug({ type: (message as SDKMessage).type }, 'Unhandled SDK message type');
