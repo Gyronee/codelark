@@ -348,15 +348,15 @@ async function handleCommand(
 
       try {
         const scopes = [
-          'docx:document:create',
-          'docx:document:readonly',
-          'docx:document:write_only',
-          'search:docs:read',
-          'wiki:wiki:readonly',
-          'wiki:wiki',
-          'drive:drive:readonly',
-          'drive:drive',
-          'bitable:bitable',
+          'docx:document:create',    // 创建文档
+          'docx:document:readonly',  // 读取文档
+          'docx:document:write_only', // 更新文档
+          'search:docs:read',        // 搜索文档和 Wiki
+          'wiki:wiki:readonly',      // 读取知识库
+          'wiki:wiki',               // 管理知识库
+          'drive:drive:readonly',    // 读取云盘文件
+          'drive:drive',             // 管理云盘文件（含上传/下载/评论/媒体）
+          'bitable:app',             // 管理多维表格（含记录/字段/视图 CRUD）
         ].join(' ');
         const deviceAuth = await requestDeviceAuthorization(config.feishu.appId, config.feishu.appSecret, scopes);
         const card = buildOAuthCard(deviceAuth.verificationUriComplete, deviceAuth.userCode);
