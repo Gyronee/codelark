@@ -95,6 +95,30 @@ function buildReasoningPanel(reasoningText: string, elapsedMs?: number): object 
   };
 }
 
+function buildToolSummaryPanel(toolSummary: string, toolCount: number): object {
+  const headerZh = `🔧 ${toolCount} 次工具调用`;
+  const headerEn = `🔧 ${toolCount} tool calls`;
+  return {
+    tag: 'collapsible_panel',
+    expanded: false,
+    header: {
+      title: {
+        tag: 'markdown',
+        content: headerEn,
+        i18n_content: { zh_cn: headerZh, en_us: headerEn },
+      },
+      vertical_align: 'center',
+      icon: { tag: 'standard_icon', token: 'down-small-ccm_outlined', size: '16px 16px' },
+      icon_position: 'follow_text',
+      icon_expanded_angle: -180,
+    },
+    border: { color: 'grey', corner_radius: '5px' },
+    vertical_spacing: '8px',
+    padding: '8px 8px 8px 8px',
+    elements: [{ tag: 'markdown', content: toolSummary, text_size: 'notation' }],
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Card utilities
 // ---------------------------------------------------------------------------
@@ -125,7 +149,7 @@ export const CardBuilder = {
     elements.push({ tag: 'action', actions: [{ tag: 'button', text: { tag: 'plain_text', content: 'Cancel' }, type: 'danger', value: { action: 'cancel_task' } }] });
     return { header: { title: { tag: 'plain_text', content: `🔧 Working · ${project}` }, template: 'orange' }, elements };
   },
-  done(project: string, text: string, toolCount: number, opts?: { reasoningText?: string; reasoningElapsedMs?: number; elapsedMs?: number; mentionTarget?: MentionTarget }): FeishuCard {
+  done(project: string, text: string, toolCount: number, opts?: { reasoningText?: string; reasoningElapsedMs?: number; elapsedMs?: number; mentionTarget?: MentionTarget; toolSummary?: string }): FeishuCard {
     const elements: unknown[] = [];
     if (opts?.mentionTarget) {
       elements.unshift({ tag: 'markdown', content: `<at id=${opts.mentionTarget.userId}></at>` });
@@ -134,6 +158,10 @@ export const CardBuilder = {
       elements.push(buildReasoningPanel(opts.reasoningText, opts.reasoningElapsedMs));
     }
     elements.push({ tag: 'markdown', content: sanitizeMarkdown(text) });
+    // Tool summary collapsible panel
+    if (opts?.toolSummary && toolCount > 0) {
+      elements.push(buildToolSummaryPanel(opts.toolSummary, toolCount));
+    }
     // Footer with status and elapsed time
     const footerParts: string[] = ['已完成'];
     if (toolCount > 0) footerParts.push(`${toolCount} 次工具调用`);

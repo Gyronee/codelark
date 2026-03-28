@@ -48,6 +48,8 @@ export class StreamingCard {
   private userMessageId: string | null;
   private typingReactionId: string | null = null;
   private lastContent: string = '';
+  private lastToolStatus: string = '';
+  private lastThinking: string = '';
   private mentionTarget: MentionTarget | null;
 
   constructor(chatId: string, threadId: string | null, userMessageId: string | null, mentionTarget?: MentionTarget) {
@@ -109,6 +111,15 @@ export class StreamingCard {
         this.cardMessageId = messageId;
         this.phase = 'streaming';
         logger.info({ cardId, messageId }, 'CardKit streaming card created');
+        // Flush any buffered tool status / thinking that arrived before card was created
+        if (this.lastThinking) {
+          this.cardKitSequence++;
+          void streamCardContent(this.cardKitCardId!, THINKING_ELEMENT_ID, this.lastThinking, this.cardKitSequence);
+        }
+        if (this.lastToolStatus) {
+          this.cardKitSequence++;
+          void streamCardContent(this.cardKitCardId!, TOOL_STATUS_ELEMENT_ID, this.lastToolStatus, this.cardKitSequence);
+        }
         return;
       }
     }
@@ -132,13 +143,20 @@ export class StreamingCard {
   }
 
   async updateThinking(content: string): Promise<void> {
+    this.lastThinking = content;
     if (!this.cardKitCardId || this.isTerminal) return;
     this.cardKitSequence++;
     await streamCardContent(this.cardKitCardId, THINKING_ELEMENT_ID, content, this.cardKitSequence);
   }
 
   async updateToolStatus(content: string): Promise<void> {
-    if (!this.cardKitCardId || this.isTerminal) return;
+    this.lastToolStatus = content;
+    if (this.isTerminal) return;
+    // Create card on first tool status update (tools may arrive before text)
+    if (!this.cardMessageId && this.phase !== 'creating') {
+      await this.ensureCardCreated();
+    }
+    if (!this.cardKitCardId || this.phase !== 'streaming') return;
     this.cardKitSequence++;
     await streamCardContent(this.cardKitCardId, TOOL_STATUS_ELEMENT_ID, content, this.cardKitSequence);
   }

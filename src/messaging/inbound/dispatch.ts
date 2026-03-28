@@ -959,6 +959,7 @@ async function handleClaudeTask(
           reasoningElapsedMs: result.reasoningElapsedMs || undefined,
           elapsedMs: result.durationMs,
           mentionTarget,
+          toolSummary: toolState.render() || undefined,
         }));
       }
     },

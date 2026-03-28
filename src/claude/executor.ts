@@ -173,6 +173,7 @@ export async function executeClaudeTask(
         }
         case 'assistant': {
           // Complete assistant message — extract tool_use blocks
+          // Complete assistant message — extract tool_use blocks
           const content = message.message?.content;
           const parentId = (message as any).parent_tool_use_id ?? null;
           if (Array.isArray(content)) {
