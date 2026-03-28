@@ -121,7 +121,7 @@ function renderSingleTool(entry: ToolEntry, indent = ''): string {
   let line = `${indent}${icon} ${entry.name}: ${entry.detail}`;
   if (entry.elapsed !== undefined) {
     if (entry.status === 'running') {
-      line += ` (${entry.elapsed}s...)`;
+      line += ` (${Math.round(entry.elapsed)}s...)`;
     } else {
       line += ` (${formatElapsed(entry.elapsed)})`;
     }

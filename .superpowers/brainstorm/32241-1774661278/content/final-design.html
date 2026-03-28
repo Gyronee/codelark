@@ -1,0 +1,61 @@
+<h2>Final Design: Tool Status Card</h2>
+<p class="subtitle">Three phases showing how the card evolves during a task</p>
+
+<div class="mockup" style="margin-bottom:24px;">
+  <div class="mockup-header">Phase 1: Main task running, no agent yet</div>
+  <div class="mockup-body" style="background:#1e1e2e; color:#cdd6f4; font-family:'SF Mono',monospace; font-size:13px; padding:16px; line-height:2;">
+    <div><span style="color:#a6e3a1;">&#10003;</span> Read 2 files <span style="color:#6c7086;">(1.8s)</span></div>
+    <div style="color:#6c7086; padding-left:18px; font-size:11px; line-height:1.4; margin-top:-4px; margin-bottom:4px;">src/index.ts, src/config.ts</div>
+    <div><span style="color:#a6e3a1;">&#10003;</span> Edit: src/config.ts <span style="color:#6c7086;">(1.5s)</span></div>
+    <div><span style="color:#f9e2af;">&#9203;</span> Bash: npm test <span style="color:#f9e2af;">(3s...)</span></div>
+  </div>
+</div>
+
+<div class="mockup" style="margin-bottom:24px;">
+  <div class="mockup-header">Phase 2: Sub-agent spawned and working</div>
+  <div class="mockup-body" style="background:#1e1e2e; color:#cdd6f4; font-family:'SF Mono',monospace; font-size:13px; padding:16px; line-height:2;">
+    <div><span style="color:#a6e3a1;">&#10003;</span> Read 2 files <span style="color:#6c7086;">(1.8s)</span></div>
+    <div style="color:#6c7086; padding-left:18px; font-size:11px; line-height:1.4; margin-top:-4px; margin-bottom:4px;">src/index.ts, src/config.ts</div>
+    <div><span style="color:#a6e3a1;">&#10003;</span> Edit: src/config.ts <span style="color:#6c7086;">(1.5s)</span></div>
+    <div><span style="color:#a6e3a1;">&#10003;</span> Bash: npm test <span style="color:#6c7086;">(4.1s)</span></div>
+    <div style="margin-top:6px;">
+      <span style="color:#89b4fa;">&#9656;</span> <span style="color:#89b4fa; font-weight:600;">Agent: code-reviewer</span>
+    </div>
+    <div style="padding-left:18px;">
+      <div><span style="color:#a6e3a1;">&#10003;</span> Read 3 files <span style="color:#6c7086;">(2.1s)</span></div>
+      <div style="color:#6c7086; padding-left:18px; font-size:11px; line-height:1.4; margin-top:-4px; margin-bottom:4px;">src/card/builder.ts, src/card/streaming-card.ts, src/claude/executor.ts</div>
+      <div><span style="color:#a6e3a1;">&#10003;</span> Grep: renderToolStatus <span style="color:#6c7086;">(0.3s)</span></div>
+      <div><span style="color:#f9e2af;">&#9203;</span> Edit: src/card/builder.ts <span style="color:#f9e2af;">(2s...)</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="mockup" style="margin-bottom:24px;">
+  <div class="mockup-header">Phase 3: Sub-agent done (collapsed), main task continues</div>
+  <div class="mockup-body" style="background:#1e1e2e; color:#cdd6f4; font-family:'SF Mono',monospace; font-size:13px; padding:16px; line-height:2;">
+    <div style="color:#6c7086;">&#10003; &#24050;&#23436;&#25104; 3 &#27425;&#24037;&#20855;&#35843;&#29992;</div>
+    <div><span style="color:#a6e3a1;">&#10003;</span> Bash: npm test <span style="color:#6c7086;">(4.1s)</span></div>
+    <div><span style="color:#a6e3a1;">&#10003;</span> Agent: code-reviewer <span style="color:#6c7086;">(5 tools, 8.7s)</span></div>
+    <div><span style="color:#f9e2af;">&#9203;</span> Bash: npx tsc --noEmit <span style="color:#f9e2af;">(6s...)</span></div>
+  </div>
+</div>
+
+<h3 style="margin-top:32px;">Design Rules Summary</h3>
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px;">
+  <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
+    <div style="font-weight:600; font-size:13px; color:#0f172a; margin-bottom:6px;">Batch Grouping</div>
+    <div style="font-size:12px; color:#64748b; line-height:1.5;">Consecutive same-tool calls merged.<br/>Show count + file name list below.</div>
+  </div>
+  <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
+    <div style="font-weight:600; font-size:13px; color:#0f172a; margin-bottom:6px;">Agent Nesting</div>
+    <div style="font-size:12px; color:#64748b; line-height:1.5;">Max 2 levels. Sub-agent indented.<br/>Deeper agents flattened into parent.</div>
+  </div>
+  <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
+    <div style="font-weight:600; font-size:13px; color:#0f172a; margin-bottom:6px;">Status Icons</div>
+    <div style="font-size:12px; color:#64748b; line-height:1.5;">&#9203; running, &#10003; done, &#10007; error.<br/>No animation, keep it simple.</div>
+  </div>
+  <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px;">
+    <div style="font-weight:600; font-size:13px; color:#0f172a; margin-bottom:6px;">Collapse Strategy</div>
+    <div style="font-size:12px; color:#64748b; line-height:1.5;">Agent done &rarr; collapse to 1-line summary.<br/>Main task tools &rarr; truncate oldest (keep 5).</div>
+  </div>
+</div>

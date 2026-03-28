@@ -1,0 +1,52 @@
+<h2>Tool Status Card: Current vs Proposed</h2>
+<p class="subtitle">Compare the current flat list with proposed tree/grouped designs</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">Current: Flat List</div>
+    <div class="mockup-body" style="background:#1a1a2e; color:#e0e0e0; font-family:monospace; font-size:13px; padding:16px; line-height:1.8;">
+      <div style="color:#888; margin-bottom:8px;">--- Tool Status ---</div>
+      <div><span style="color:#6c6">&#10003;</span> Read: src/index.ts (1.2s) &rarr; done</div>
+      <div><span style="color:#6c6">&#10003;</span> Read: src/config.ts (0.8s) &rarr; done</div>
+      <div><span style="color:#6c6">&#10003;</span> Edit: src/config.ts (1.5s) &rarr; done</div>
+      <div><span style="color:#6c6">&#10003;</span> Bash: npm test (3.2s) &rarr; done</div>
+      <div><span style="color:#f90;">&#x1f527;</span> Bash: npx tsc --noEmit (5s)</div>
+      <div style="color:#888; margin-top:8px; font-size:11px;">Max 5 visible, rest collapsed as "&#10003; &#24050;&#23436;&#25104; N &#20010;&#24037;&#20855;&#35843;&#29992;"</div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">Proposed: Tree + Grouping</div>
+    <div class="mockup-body" style="background:#1a1a2e; color:#e0e0e0; font-family:monospace; font-size:13px; padding:16px; line-height:1.8;">
+      <div style="color:#888; margin-bottom:8px;">--- Tool Status ---</div>
+      <div><span style="color:#6c6">&#10003;</span> Read 2 files <span style="color:#888">(2.0s)</span></div>
+      <div style="color:#888; padding-left:20px; font-size:11px;">src/index.ts, src/config.ts</div>
+      <div><span style="color:#6c6">&#10003;</span> Edit: src/config.ts <span style="color:#888">(1.5s)</span></div>
+      <div><span style="color:#6c6">&#10003;</span> Bash: npm test <span style="color:#888">(3.2s)</span></div>
+      <div style="margin-top:10px; padding-left:0;">
+        <span style="color:#7af;">&#9656;</span> <span style="color:#7af; font-weight:bold;">Agent: code-reviewer</span>
+      </div>
+      <div style="padding-left:20px;">
+        <div><span style="color:#6c6">&#10003;</span> Read 3 files <span style="color:#888">(1.8s)</span></div>
+        <div><span style="animation:blink 1s infinite; color:#f90;">&#x25cf;</span> Bash: npx tsc --noEmit <span style="color:#f90;">(5s...)</span></div>
+      </div>
+      <style>@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}</style>
+    </div>
+  </div>
+</div>
+
+<h3 style="margin-top:32px;">Key Differences</h3>
+<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-top:16px;">
+  <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:16px;">
+    <div style="font-weight:600; color:#0369a1; margin-bottom:8px;">Tree Nesting</div>
+    <div style="font-size:13px; color:#475569;">Agent sub-tasks indented under parent. Shows hierarchy at a glance.</div>
+  </div>
+  <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:16px;">
+    <div style="font-weight:600; color:#15803d; margin-bottom:8px;">Batch Grouping</div>
+    <div style="font-size:13px; color:#475569;">"Read 3 files" instead of 3 separate lines. Expands to show file list.</div>
+  </div>
+  <div style="background:#fefce8; border:1px solid #fde68a; border-radius:8px; padding:16px;">
+    <div style="font-weight:600; color:#a16207; margin-bottom:8px;">Live Progress</div>
+    <div style="font-size:13px; color:#475569;">Blinking dot for running tools, elapsed time updates in real-time.</div>
+  </div>
+</div>

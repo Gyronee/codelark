@@ -38,6 +38,13 @@ describe('Basic tool tracking', () => {
     state.completeTool('t1', 'done');
     expect(state.render()).toBe('✓ Read: src/index.ts');
   });
+
+  it('renders running tool elapsed as integer', () => {
+    const state = new ToolRenderState();
+    state.addTool({ toolUseId: 't1', name: 'Bash', detail: 'npm test', parentToolUseId: null });
+    state.updateToolElapsed('t1', 3.7);
+    expect(state.render()).toBe('⏳ Bash: npm test (4s...)');
+  });
 });
 
 // ---------------------------------------------------------------------------
