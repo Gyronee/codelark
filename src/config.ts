@@ -12,6 +12,7 @@ export interface Config {
   debounceMs: number;
   botOpenId: string;
   sessionTitledOnly: boolean;  // /session list only shows sessions with customTitle
+  botClaudeHome: string | null; // 独立 HOME 目录，隔离 bot session 和 CLI session
 }
 
 function requireEnv(name: string): string {
@@ -40,5 +41,6 @@ export function loadConfig(): Config {
     botOpenId: process.env.BOT_OPEN_ID || '',
     sessionTitledOnly: process.env.SESSION_TITLED_ONLY === 'true',
     adminUserIds: parseList(process.env.ADMIN_USER_IDS),
+    botClaudeHome: process.env.BOT_CLAUDE_HOME || null,
   };
 }

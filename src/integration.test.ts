@@ -51,7 +51,7 @@ describe('Integration: pipeline flow', () => {
       feishu: { appId: 'cli_test', appSecret: '' },
       anthropicApiKey: undefined, workspaceDir: TEST_WORKSPACE,
       allowedUserIds: ['ou_user1'], allowedGroupIds: [], adminUserIds: [],
-      taskTimeoutMs: 300000, debounceMs: 500, botOpenId: 'ou_bot', sessionTitledOnly: false,
+      taskTimeoutMs: 300000, debounceMs: 500, botOpenId: 'ou_bot', sessionTitledOnly: false, botClaudeHome: null,
     };
     expect(checkGate(ctx, config)).toBe('pass');
 

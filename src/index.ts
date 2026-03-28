@@ -11,6 +11,15 @@ import { join } from 'path';
 
 async function main(): Promise<void> {
   const config = loadConfig();
+
+  // Isolate bot session storage from CLI if BOT_CLAUDE_HOME is set
+  if (config.botClaudeHome) {
+    process.env.HOME = config.botClaudeHome;
+    logger.info({ botClaudeHome: config.botClaudeHome }, 'Using isolated HOME for bot sessions — CLI session resume disabled');
+  } else {
+    logger.warn('BOT_CLAUDE_HOME not set — bot sessions will be visible to CLI tools like /insights. Set BOT_CLAUDE_HOME to isolate.');
+  }
+
   logger.info({ workspaceDir: config.workspaceDir }, 'Starting codelark');
 
   const dbPath = join(config.workspaceDir, 'codelark.db');

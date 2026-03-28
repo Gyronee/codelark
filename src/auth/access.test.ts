@@ -17,6 +17,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     debounceMs: 500,
     botOpenId: '',
     sessionTitledOnly: false,
+    botClaudeHome: null,
     ...overrides,
   };
 }

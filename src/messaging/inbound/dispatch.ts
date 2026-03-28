@@ -428,14 +428,17 @@ async function handleCommand(
           botSessions = db.listSessions(ctx.senderId, ctx.threadId, effectiveProject);
         }
 
-        // Collect CLI sessions from local files
-        let cliSessions = listLocalSessions(50);
-        if (config.sessionTitledOnly) {
-          cliSessions = cliSessions.filter(s => s.hasCustomTitle);
-        }
-        cliSessions = cliSessions.filter(s => hasAccess(ctx.senderId, s.projectName, config.workspaceDir, config));
-        if (currentProject) {
-          cliSessions = cliSessions.filter(s => s.projectName === currentProject);
+        // Collect CLI sessions from local files (skip if using isolated HOME)
+        let cliSessions: Awaited<ReturnType<typeof listLocalSessions>> = [];
+        if (!config.botClaudeHome) {
+          cliSessions = listLocalSessions(50);
+          if (config.sessionTitledOnly) {
+            cliSessions = cliSessions.filter(s => s.hasCustomTitle);
+          }
+          cliSessions = cliSessions.filter(s => hasAccess(ctx.senderId, s.projectName, config.workspaceDir, config));
+          if (currentProject) {
+            cliSessions = cliSessions.filter(s => s.projectName === currentProject);
+          }
         }
 
         // Build unified list: [{type, sortTime, line}]
@@ -533,8 +536,8 @@ async function handleCommand(
           return;
         }
 
-        // Second try: match CLI session (P2P only)
-        if (ctx.chatType === 'group') {
+        // Second try: match CLI session (P2P only, shared HOME only)
+        if (ctx.chatType === 'group' || config.botClaudeHome) {
           await reply(`未找到 ID 以 "${idPrefix}" 开头的会话`);
           return;
         }
