@@ -8,6 +8,7 @@ import { resolve, basename, sep } from 'path';
 import { realpathSync, statSync, unlinkSync } from 'fs';
 import { sendText, sendCard, updateCard, uploadFile, sendFile } from '../outbound/send.js';
 import { StreamingCard } from '../../card/streaming-card.js';
+import { ToolRenderState } from '../../card/tool-render-state.js';
 import { CardBuilder, type MentionTarget } from '../../card/builder.js';
 import { executeClaudeTask, type ExecutionResult } from '../../claude/executor.js';
 import { requestPermission } from './card-actions.js';
@@ -715,33 +716,6 @@ async function handleProjectCommand(
   }
 }
 
-interface ToolCallInfo {
-  toolUseId: string;
-  name: string;
-  detail: string;
-  status: 'running' | 'done' | 'error';
-  elapsed?: number;
-  resultSummary?: string;
-}
-
-const MAX_VISIBLE_TOOLS = 5;
-
-function renderToolStatus(tools: ToolCallInfo[]): string {
-  if (tools.length === 0) return '';
-  const lines: string[] = [];
-  const hiddenCount = Math.max(0, tools.length - MAX_VISIBLE_TOOLS);
-  const visible = tools.slice(-MAX_VISIBLE_TOOLS);
-  if (hiddenCount > 0) {
-    lines.push(`✓ 已完成 ${hiddenCount} 个工具调用`);
-  }
-  for (const t of visible) {
-    const icon = t.status === 'running' ? '🔧' : t.status === 'done' ? '✓' : '✗';
-    const elapsed = t.elapsed ? ` (${Math.round(t.elapsed)}s)` : '';
-    const result = t.resultSummary && t.status === 'done' ? ` → ${t.resultSummary}` : '';
-    lines.push(`${icon} ${t.name}: ${t.detail}${elapsed}${result}`);
-  }
-  return lines.join('\n');
-}
 
 function replaceMentions(text: string, chatId: string, threadId?: string | null): string {
   const users = getActiveUsers(chatId, threadId);
@@ -847,8 +821,7 @@ async function handleClaudeTask(
   registry.setActive(queueKey, { abortController, abortCard: () => card.abortCard(), userId: ctx.senderId });
 
   const timeout = setTimeout(() => abortController.abort(), config.taskTimeoutMs);
-  const toolCalls: ToolCallInfo[] = [];
-  const toolUseIdMap = new Map<string, number>();
+  const toolState = new ToolRenderState();
   const startTime = Date.now();
   let confirmMessageId: string | null = null;
   let confirmCount = 0;
@@ -895,35 +868,25 @@ async function handleClaudeTask(
         void card.updateThinking(elapsedMs > 0 ? `💭 思考完成${elapsed}` : '');
       }
     },
-    onToolStart: (toolUseId, tool, detail, _parentToolUseId) => {
-      const idx = toolCalls.length;
-      toolCalls.push({ toolUseId, name: tool, detail, status: 'running' });
-      toolUseIdMap.set(toolUseId, idx);
-      void card.updateToolStatus(renderToolStatus(toolCalls));
+    onToolStart: (toolUseId, tool, detail, parentToolUseId) => {
+      toolState.addTool({ toolUseId, name: tool, detail, parentToolUseId });
+      void card.updateToolStatus(toolState.render());
     },
-    onToolEnd: (toolUseId, resultSummary) => {
-      const idx = toolUseIdMap.get(toolUseId);
-      if (idx !== undefined && toolCalls[idx]) {
-        toolCalls[idx].status = 'done';
-        toolCalls[idx].resultSummary = resultSummary;
-      } else {
-        const running = toolCalls.find(t => t.status === 'running');
-        if (running) { running.status = 'done'; running.resultSummary = resultSummary; }
-      }
-      void card.updateToolStatus(renderToolStatus(toolCalls));
+    onToolEnd: (toolUseId, _resultSummary) => {
+      toolState.completeTool(toolUseId, 'done');
+      void card.updateToolStatus(toolState.render());
     },
     onToolProgress: (toolUseId, _toolName, elapsed) => {
-      const idx = toolUseIdMap.get(toolUseId);
-      if (idx !== undefined && toolCalls[idx]) {
-        toolCalls[idx].elapsed = elapsed;
-        void card.updateToolStatus(renderToolStatus(toolCalls));
-      }
+      toolState.updateToolElapsed(toolUseId, elapsed);
+      void card.updateToolStatus(toolState.render());
     },
-    onAgentStart: (_toolUseId, _name) => {
-      // Agent sub-task started — no-op for now; Task 4 will wire this to ToolRenderState
+    onAgentStart: (toolUseId, name) => {
+      toolState.addAgent(toolUseId, name);
+      void card.updateToolStatus(toolState.render());
     },
-    onAgentEnd: (_toolUseId, _summary, _toolCount, _durationMs) => {
-      // Agent sub-task ended — no-op for now; Task 4 will wire this to ToolRenderState
+    onAgentEnd: (toolUseId, _summary, _toolCount, _durationMs) => {
+      toolState.completeAgent(toolUseId);
+      void card.updateToolStatus(toolState.render());
     },
     onPermissionRequest: async (toolName, input) => {
       // Queue: serialize permission requests, show one at a time on one card
@@ -982,7 +945,7 @@ async function handleClaudeTask(
         await updateCard(confirmMessageId, CardBuilder.status(`✓ 任务完成，共确认 ${confirmCount} 次操作`));
       }
       if (result.sessionId) db.updateClaudeSessionId(session.id, result.sessionId);
-      db.logTask(session.id, ctx.text, result.text, JSON.stringify(toolCalls.map(t => t.name)), result.durationMs, 'success');
+      db.logTask(session.id, ctx.text, result.text, `${result.toolCount} tools`, result.durationMs, 'success');
       let resultText = result.text;
       if (ctx.chatType === 'group') {
         resultText = replaceMentions(resultText, ctx.chatId, ctx.threadId);
