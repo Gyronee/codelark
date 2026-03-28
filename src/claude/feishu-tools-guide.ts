@@ -82,4 +82,57 @@ Bot 回复渲染为飞书消息卡片，Markdown 支持范围与文档不同：
 - 支持：代码块、列表、引用、加粗、斜体、链接
 - 不支持 Lark 扩展标签（callout、grid、lark-table 等均不生效）
 - 回复内容应使用标准 Markdown，不要使用文档专用的 Lark Markdown 语法
+
+## 6. 多维表格使用指南
+
+### 6.1 字段类型与 property
+
+| type | 类型 | property 要点 |
+|------|------|--------------|
+| 1 | 文本 | 无需 property |
+| 2 | 数字 | formatter: "0", "0.0", "0.00", "0%", "1,000" 等 |
+| 3 | 单选 | options: [{name, color?}]，color 为 0-54 的数字 |
+| 4 | 多选 | 同单选 |
+| 5 | 日期 | date_formatter: "yyyy/MM/dd", "yyyy/MM/dd HH:mm" 等 |
+| 7 | 复选框 | 无需 property |
+| 11 | 人员 | multiple: boolean |
+| 13 | 电话 | 无需 property |
+| 15 | 超链接 | 不要传 property（传了会报错） |
+| 17 | 附件 | 无需 property |
+| 18 | 单向关联 | table_id（目标表）, multiple: boolean |
+| 20 | 公式 | 不可通过 API 创建 |
+| 22 | 地理位置 | location: {input_type: "only_mobile" 或 "not_limit"} |
+| 1001 | 创建时间 | 只读，自动生成 |
+| 1002 | 修改时间 | 只读，自动生成 |
+| 1003 | 创建人 | 只读，自动生成 |
+| 1004 | 修改人 | 只读，自动生成 |
+| 99001 | 进度 | 无需 property |
+| 99002 | 货币 | currency_code: "CNY", "USD", "EUR" 等 |
+| 99003 | 评分 | rating: {symbol: "star"} |
+
+### 6.2 记录值格式
+
+写入记录时，不同字段类型的值格式不同，以下是容易出错的类型：
+- 人员字段：\`[{id: "ou_xxx"}]\` — 必须是数组，id 为用户 open_id
+- 日期字段：毫秒时间戳（如 1700000000000），不是秒
+- 超链接字段：\`{text: "显示文本", link: "https://..."}\`
+- 单选/多选：直接用选项名称字符串，如 "进行中"
+- 附件字段：需先通过 feishu_drive_file(action: upload) 获取 file_token
+- 关联字段：\`[{record_id: "recXXX"}]\`
+- 复选框：true 或 false
+
+### 6.3 Filter 语法
+
+search action 使用对象格式：
+\`{conjunction: "and", conditions: [{field_name: "状态", operator: "is", value: ["进行中"]}]}\`
+
+常用 operator：is, isNot, contains, isGreater, isLess, isEmpty, isNotEmpty
+
+list action 使用字符串格式：CurrentValue.[字段名]="值"
+
+### 6.4 常见错误
+- 批量操作（batch_create/batch_update/batch_delete）最多 500 条
+- 超链接字段（type 15）创建时不要传 property
+- 公式字段和查找引用字段不能通过 API 创建
+- 自动编号、创建时间/人、修改时间/人为只读字段
 `.trim();

@@ -43,4 +43,19 @@ describe('feishuToolsGuide', () => {
     expect(feishuToolsGuide).toContain('99991668');
     expect(feishuToolsGuide).toContain('99991672');
   });
+
+  it('should contain bitable guide section', () => {
+    expect(feishuToolsGuide).toContain('多维表格');
+    expect(feishuToolsGuide).toContain('字段类型');
+    expect(feishuToolsGuide).toContain('记录值格式');
+    expect(feishuToolsGuide).toContain('Filter');
+    // Key field types
+    expect(feishuToolsGuide).toContain('单选');
+    expect(feishuToolsGuide).toContain('多选');
+    expect(feishuToolsGuide).toContain('日期');
+    expect(feishuToolsGuide).toContain('人员');
+    // Key record value gotchas
+    expect(feishuToolsGuide).toContain('毫秒时间戳');
+    expect(feishuToolsGuide).toContain('ou_xxx');
+  });
 });

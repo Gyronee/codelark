@@ -15,6 +15,7 @@ import { createWikiSpaceTool, createWikiSpaceNodeTool } from './feishu-wiki.js';
 import { createDriveFileTool } from './feishu-drive.js';
 import { createDocMediaTool } from './feishu-doc-media.js';
 import { createDocCommentsTool } from './feishu-doc-comments.js';
+import { createBitableTool, createBitableFieldTool, createBitableRecordTool } from './feishu-bitable.js';
 import type { Database } from '../session/db.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
@@ -155,6 +156,9 @@ export function createFeishuDocServer(
   const driveFileTool = createDriveFileTool(boundWithToken, client);
   const docMediaTool = createDocMediaTool(boundWithToken, client);
   const docCommentsTool = createDocCommentsTool(boundWithToken, client);
+  const bitableTool = createBitableTool(boundWithToken, client);
+  const bitableFieldTool = createBitableFieldTool(boundWithToken, client);
+  const bitableRecordTool = createBitableRecordTool(boundWithToken, client);
 
   return createSdkMcpServer({
     name: 'feishu-docs',
@@ -163,6 +167,7 @@ export function createFeishuDocServer(
       feishuDocCreate, feishuDocFetch, feishuDocUpdate,
       searchTool, wikiSpaceTool, wikiSpaceNodeTool,
       driveFileTool, docMediaTool, docCommentsTool,
+      bitableTool, bitableFieldTool, bitableRecordTool,
     ],
   });
 }

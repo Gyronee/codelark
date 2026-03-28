@@ -110,6 +110,9 @@ export async function executeClaudeTask(
           'mcp__feishu-docs__feishu_drive_file',
           'mcp__feishu-docs__feishu_doc_media',
           'mcp__feishu-docs__feishu_doc_comments',
+          'mcp__feishu-docs__feishu_bitable',
+          'mcp__feishu-docs__feishu_bitable_field',
+          'mcp__feishu-docs__feishu_bitable_record',
         ],
         permissionMode: 'default',
         canUseTool: async (toolName, input, _options) => {
