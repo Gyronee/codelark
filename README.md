@@ -20,7 +20,7 @@ CodeLark connects [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 
 - **Claude Opus / Sonnet / Haiku** — Switch models per session with `/model`
 - **Full Claude Code toolset** — Read, Write, Edit, Bash, Glob, Grep
 - **Extended thinking** — Reasoning displayed in collapsible panels, separated from the final answer
-- **Session management** — Resume local CLI sessions, create named sessions, per-project isolation
+- **Session management** — Fork sessions to explore different directions, resume bot or CLI sessions, list/rename sessions
 - **MCP plugin support** — Auto-loads Claude Code plugins from local cache
 
 ### Messaging
@@ -36,6 +36,7 @@ CodeLark connects [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 
 - **Search** — Unified doc & wiki search with filters (creator, type, time range)
 - **Comments** — List, create, and resolve document comments
 - **Media** — Insert images/files into documents, download attachments
+- **Bitable** — Full CRUD for multi-dimensional tables: create apps/tables/views, manage fields (22 field types), batch read/write/search records (up to 500 per call)
 
 ### Streaming Cards
 - **CardKit 2.0** with streaming mode — real-time content updates
@@ -93,6 +94,7 @@ A session is the **conversation context** (chat history) that Claude remembers.
 
 - **Bot sessions** — Created automatically. In DMs, one session per user per project. In groups, one session per thread. Use `/new` to clear context and start fresh.
 - **CLI sessions** — If you also use Claude Code locally, you can resume a local CLI session in Feishu with `/session resume <id>`. This lets you continue a task you started in your terminal. Use `/session list` to see available local sessions, and `/session exit` to return to normal mode.
+- **Forking** — Use `/session fork` to branch off from the current conversation. This creates a new session with a copy of the chat history, letting you explore a different direction while keeping the original intact.
 
 ### How it all fits together
 
@@ -195,8 +197,9 @@ The bot connects via WebSocket — no public server or domain needed.
 | `/project clone <url>` | Clone a git repository |
 | `/project grant <name> <user_id>` | Grant project access |
 | `/project revoke <name> <user_id>` | Revoke project access |
-| `/session list` | List recent sessions |
-| `/session resume <id>` | Resume a local CLI session |
+| `/session list` | List bot and CLI sessions |
+| `/session resume <id>` | Resume a bot or CLI session |
+| `/session fork [title]` | Fork current session into a new branch |
 | `/session rename <name>` | Rename current session |
 | `/session new` or `/new` | Start a fresh session |
 | `/file <path>` | Upload a file from the project |
@@ -223,7 +226,8 @@ src/
 │   │   └── send.ts             # Feishu client & message sending
 │   └── types.ts                # Shared message types
 ├── claude/
-│   └── executor.ts             # Claude Agent SDK integration
+│   ├── executor.ts             # Claude Agent SDK integration
+│   └── feishu-tools-guide.ts   # System prompt guide for Feishu tools
 ├── card/
 │   ├── streaming-card.ts       # CardKit 2.0 streaming lifecycle
 │   ├── builder.ts              # Card content construction
@@ -255,6 +259,7 @@ src/
 │   ├── feishu-search.ts        # Doc & wiki search
 │   ├── feishu-doc-media.ts     # Document media (images/files)
 │   ├── feishu-doc-comments.ts  # Document comments
+│   ├── feishu-bitable.ts       # Bitable (multi-dimensional table) CRUD
 │   └── feishu-mcp.ts           # MCP tool type definitions
 └── utils/
     └── command.ts              # Slash command parser
@@ -289,6 +294,7 @@ Message → Dedup → Parse → Record (history) → Gate (ACL) → Enqueue → 
 | `TASK_TIMEOUT_MS` | No | `300000` | Max task duration (5 min) |
 | `DEBOUNCE_MS` | No | `500` | Message processing debounce |
 | `SESSION_TITLED_ONLY` | No | `false` | Only show titled sessions in list |
+| `BOT_CLAUDE_HOME` | No | — | Isolated HOME for bot sessions (prevents bot sessions from appearing in CLI `/insights`) |
 | `LOG_LEVEL` | No | `info` | Log level (`info` or `debug`) |
 
 ## Tech Stack

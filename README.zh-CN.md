@@ -20,7 +20,7 @@ CodeLark 通过 [Claude Agent SDK](https://github.com/anthropics/claude-agent-sd
 - **Claude Opus / Sonnet / Haiku** — 通过 `/model` 按会话切换模型
 - **完整 Claude Code 工具集** — Read、Write、Edit、Bash、Glob、Grep
 - **扩展思维** — 推理过程在折叠面板中展示，与最终回答分离
-- **会话管理** — 恢复本地 CLI 会话、命名会话、按项目隔离
+- **会话管理** — 分叉会话探索不同方向、恢复 Bot 或 CLI 会话、列出/重命名会话
 - **MCP 插件支持** — 自动加载本地缓存的 Claude Code 插件
 
 ### 消息处理
@@ -36,6 +36,7 @@ CodeLark 通过 [Claude Agent SDK](https://github.com/anthropics/claude-agent-sd
 - **搜索** — 文档与知识库统一搜索，支持按创建者、类型、时间范围过滤
 - **评论** — 列出、创建、解决文档评论
 - **媒体** — 向文档中插入图片/文件，下载附件
+- **多维表格** — 完整 CRUD：创建应用/数据表/视图，管理字段（22 种类型），批量读写/搜索记录（单次最多 500 条）
 
 ### 流式卡片
 - **CardKit 2.0** 流式模式 — 实时内容更新
@@ -93,6 +94,7 @@ CodeLark 有三个核心概念需要了解：
 
 - **Bot 会话** — 自动创建。私聊中每个用户每个项目一个会话，群聊中每个话题一个会话。使用 `/new` 清空上下文重新开始。
 - **CLI 会话** — 如果你也在本地使用 Claude Code，可以通过 `/session resume <ID>` 在飞书中恢复本地 CLI 会话，继续在终端中开始的工作。使用 `/session list` 查看可用的本地会话，`/session exit` 返回正常模式。
+- **分叉** — 使用 `/session fork` 从当前对话分叉。这会创建一个新会话，复制当前聊天记录，让你在保留原始对话的同时探索新方向。
 
 ### 如何协同工作
 
@@ -195,8 +197,9 @@ npm run build && npm start
 | `/project clone <URL>` | 克隆 Git 仓库 |
 | `/project grant <名称> <用户ID>` | 授予项目访问权限 |
 | `/project revoke <名称> <用户ID>` | 撤销项目访问权限 |
-| `/session list` | 列出最近的会话 |
-| `/session resume <ID>` | 恢复本地 CLI 会话 |
+| `/session list` | 列出 Bot 和 CLI 会话 |
+| `/session resume <ID>` | 恢复 Bot 或 CLI 会话 |
+| `/session fork [标题]` | 从当前会话分叉新分支 |
 | `/session rename <名称>` | 重命名当前会话 |
 | `/session new` 或 `/new` | 开始新会话 |
 | `/file <路径>` | 从项目上传文件 |
@@ -217,6 +220,7 @@ npm run build && npm start
 | `TASK_TIMEOUT_MS` | 否 | `300000` | 任务最大执行时间（5 分钟） |
 | `DEBOUNCE_MS` | 否 | `500` | 消息处理防抖时间 |
 | `SESSION_TITLED_ONLY` | 否 | `false` | 会话列表仅显示已命名的会话 |
+| `BOT_CLAUDE_HOME` | 否 | — | Bot 独立 HOME 目录（防止 bot 会话出现在 CLI `/insights` 中） |
 | `LOG_LEVEL` | 否 | `info` | 日志级别（`info` 或 `debug`） |
 
 ## 技术栈
