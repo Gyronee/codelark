@@ -18,6 +18,7 @@ export interface SessionRow {
   project_name: string;
   claude_session_id: string | null;
   model: string | null;
+  title: string | null;
   last_active_at: string | null;
   created_at: string;
 }
@@ -124,6 +125,12 @@ export class Database {
     } catch {
       // column already exists
     }
+
+    try {
+      this.db.exec('ALTER TABLE sessions ADD COLUMN title TEXT;');
+    } catch {
+      // column already exists
+    }
   }
 
   upsertUser(feishuUserId: string, name: string | null): void {
@@ -206,6 +213,40 @@ export class Database {
   resetSession(sessionId: string): void {
     this.db.prepare('UPDATE sessions SET claude_session_id = NULL WHERE id = ?')
       .run(sessionId);
+  }
+
+  listSessions(feishuUserId: string, topicId: string | null, projectName: string): SessionRow[] {
+    if (topicId) {
+      return this.db.prepare(`
+        SELECT * FROM sessions
+        WHERE feishu_user_id = ? AND topic_id = ? AND project_name = ?
+        ORDER BY last_active_at DESC
+      `).all(feishuUserId, topicId, projectName) as SessionRow[];
+    }
+    return this.db.prepare(`
+      SELECT * FROM sessions
+      WHERE feishu_user_id = ? AND topic_id IS NULL AND project_name = ?
+      ORDER BY last_active_at DESC
+    `).all(feishuUserId, projectName) as SessionRow[];
+  }
+
+  setSessionTitle(sessionId: string, title: string): void {
+    this.db.prepare('UPDATE sessions SET title = ? WHERE id = ?')
+      .run(title, sessionId);
+  }
+
+  findBotSessionByIdPrefix(idPrefix: string): SessionRow | null {
+    const row = this.db.prepare(
+      'SELECT * FROM sessions WHERE id LIKE ? LIMIT 1'
+    ).get(`${idPrefix}%`);
+    return (row ?? null) as SessionRow | null;
+  }
+
+  findSessionByClaudeSessionId(claudeSessionId: string): SessionRow | null {
+    const row = this.db.prepare(
+      'SELECT * FROM sessions WHERE claude_session_id = ? LIMIT 1'
+    ).get(claudeSessionId);
+    return (row ?? null) as SessionRow | null;
   }
 
   logTask(

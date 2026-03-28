@@ -1,7 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SessionManager } from './manager.js';
 import { Database } from './db.js';
 import { existsSync, unlinkSync } from 'fs';
+
+// Mock forkSession from SDK
+vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
+  forkSession: vi.fn().mockResolvedValue({ sessionId: 'forked-session-uuid' }),
+}));
 
 const TEST_DB = '/tmp/codelark-session-test.db';
 
@@ -72,6 +77,44 @@ describe('SessionManager', () => {
     sm.resetGroup('chat_1', null, 'group-proj');
     const s2 = sm.getOrCreateGroup('chat_1', null, 'group-proj');
     expect(s2.claude_session_id).toBeNull();
+  });
+
+  describe('fork', () => {
+    it('creates a new session with forked claude_session_id', async () => {
+      // Create original session with a claude_session_id
+      const original = sm.getOrCreate('user1', null, 'project1');
+      db.updateClaudeSessionId(original.id, 'original-claude-id');
+
+      const forked = await sm.fork('user1', null, 'project1', 'original-claude-id', '/path/to/project', 'Fork title');
+
+      expect(forked.claude_session_id).toBe('forked-session-uuid');
+      expect(forked.title).toBe('Fork title');
+      expect(forked.id).not.toBe(original.id);
+
+      // Forked session should appear in the session list
+      const all = sm.listAll('user1', null, 'project1');
+      expect(all.some(s => s.id === forked.id)).toBe(true);
+      expect(all).toHaveLength(2);
+    });
+
+    it('fork without title sets title to null', async () => {
+      const original = sm.getOrCreate('user1', null, 'project1');
+      db.updateClaudeSessionId(original.id, 'original-claude-id');
+
+      const forked = await sm.fork('user1', null, 'project1', 'original-claude-id', '/path/to/project');
+      expect(forked.title).toBeNull();
+    });
+  });
+
+  describe('listAll', () => {
+    it('returns all sessions for a composite key', () => {
+      sm.getOrCreate('user1', null, 'project1');
+      sm.getOrCreate('user1', null, 'project1'); // same composite key, but getOrCreate returns existing
+      // Create a second session by direct DB insert
+      db.createSession('user1', null, 'project1');
+      const sessions = sm.listAll('user1', null, 'project1');
+      expect(sessions.length).toBeGreaterThanOrEqual(2);
+    });
   });
 
 });

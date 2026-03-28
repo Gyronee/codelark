@@ -235,6 +235,63 @@ describe('Database', () => {
     });
   });
 
+  describe('title column', () => {
+    it('SessionRow should have title field after migration', () => {
+      const id = db.createSession('user1', null, 'project1');
+      const session = db.findSession('user1', null, 'project1');
+      expect(session).not.toBeNull();
+      expect(session!.title).toBeNull();
+    });
+
+    it('setSessionTitle updates the title', () => {
+      const id = db.createSession('user1', null, 'project1');
+      db.setSessionTitle(id, 'My Session');
+      const session = db.findSession('user1', null, 'project1');
+      expect(session!.title).toBe('My Session');
+    });
+  });
+
+  describe('listSessions', () => {
+    it('returns all sessions for a (userId, topicId, projectName) combo', () => {
+      db.createSession('user1', null, 'project1');
+      db.createSession('user1', null, 'project1');
+      db.createSession('user1', null, 'other-project');
+      const sessions = db.listSessions('user1', null, 'project1');
+      expect(sessions).toHaveLength(2);
+    });
+
+    it('orders by last_active_at DESC', () => {
+      const id1 = db.createSession('user1', null, 'project1');
+      const id2 = db.createSession('user1', null, 'project1');
+      db.touchSession(id1); // make id1 most recent
+      const sessions = db.listSessions('user1', null, 'project1');
+      expect(sessions[0].id).toBe(id1);
+      expect(sessions[1].id).toBe(id2);
+    });
+
+    it('respects topicId', () => {
+      db.createSession('user1', 'topic1', 'project1');
+      db.createSession('user1', null, 'project1');
+      const sessions = db.listSessions('user1', 'topic1', 'project1');
+      expect(sessions).toHaveLength(1);
+    });
+  });
+
+  describe('findBotSessionByIdPrefix', () => {
+    it('finds session by ID prefix', () => {
+      const id = db.createSession('user1', null, 'project1');
+      const found = db.findBotSessionByIdPrefix(id.slice(0, 8));
+      expect(found).not.toBeNull();
+      expect(found!.id).toBe(id);
+    });
+
+    it('returns null for non-matching prefix', () => {
+      db.createSession('user1', null, 'project1');
+      const found = db.findBotSessionByIdPrefix('xxxxxxxx');
+      expect(found).toBeNull();
+    });
+  });
+
   describe('task logs', () => {
     it('logs a task', () => {
       const sessionId = db.createSession('ou_123', null, 'my-app');

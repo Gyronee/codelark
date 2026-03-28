@@ -1,6 +1,6 @@
 import type { MessageContext } from '../types.js';
 import type { Config } from '../../config.js';
-import type { Database } from '../../session/db.js';
+import type { Database, SessionRow } from '../../session/db.js';
 import type { SessionManager } from '../../session/manager.js';
 import type { ProjectManager } from '../../project/manager.js';
 import { parseCommand } from '../../utils/command.js';
@@ -414,34 +414,71 @@ async function handleCommand(
 
       if (cmd.action === 'list' || !cmd.action) {
         const currentProject = getCurrentProjectName(ctx, db) || null;
-        // Group non-topic: no CLI sessions to show
         if (ctx.chatType === 'group' && !ctx.threadId && !currentProject) {
           await reply('群默认目录没有可恢复的会话。请在话题中使用 /session list');
           return;
         }
-        let sessions = listLocalSessions(50);
+
+        // Collect bot sessions from DB
+        let botSessions: SessionRow[] = [];
+        const effectiveProject = currentProject || DEFAULT_PROJECT_LABEL;
+        if (ctx.chatType === 'group') {
+          botSessions = db.listSessions(`group:${ctx.chatId}`, ctx.threadId, effectiveProject);
+        } else {
+          botSessions = db.listSessions(ctx.senderId, ctx.threadId, effectiveProject);
+        }
+
+        // Collect CLI sessions from local files
+        let cliSessions = listLocalSessions(50);
         if (config.sessionTitledOnly) {
-          sessions = sessions.filter(s => s.hasCustomTitle);
+          cliSessions = cliSessions.filter(s => s.hasCustomTitle);
         }
-        sessions = sessions.filter(s => hasAccess(ctx.senderId, s.projectName, config.workspaceDir, config));
+        cliSessions = cliSessions.filter(s => hasAccess(ctx.senderId, s.projectName, config.workspaceDir, config));
         if (currentProject) {
-          sessions = sessions.filter(s => s.projectName === currentProject);
+          cliSessions = cliSessions.filter(s => s.projectName === currentProject);
         }
-        sessions = sessions.slice(0, 10);
-        if (sessions.length === 0) {
+
+        // Build unified list: [{type, sortTime, line}]
+        type ListItem = { sortTime: number; line: string };
+        const items: ListItem[] = [];
+
+        // Current bot session (for marking active)
+        let currentBotSessionId: string | null = null;
+        if (botSessions.length > 0) currentBotSessionId = botSessions[0].id;
+
+        for (const s of botSessions) {
+          if (!s.claude_session_id) continue; // skip sessions that never had a conversation
+          const ago = formatTimeAgo(new Date(s.last_active_at || s.created_at).getTime());
+          const active = s.id === currentBotSessionId ? ' · ✦ 当前' : '';
+          const title = s.title ? `**${s.title}**` : '_(未命名)_';
+          const sortTime = new Date(s.last_active_at || s.created_at).getTime();
+          items.push({
+            sortTime,
+            line: `[Bot] ${title}${active}\n    🕐 ${ago} · ID: ${s.id.slice(0, 8)}`,
+          });
+        }
+
+        for (const s of cliSessions) {
+          const ago = formatTimeAgo(s.lastModified);
+          const status = s.isActive ? ' · 🔒 使用中' : '';
+          const title = s.summary !== s.sessionId.slice(0, 8) ? `**${s.summary}**` : '_(未命名)_';
+          items.push({
+            sortTime: s.lastModified,
+            line: `[CLI] ${title}${status}\n    🕐 ${ago} · ID: ${s.sessionId.slice(0, 8)}`,
+          });
+        }
+
+        items.sort((a, b) => b.sortTime - a.sortTime);
+        const display = items.slice(0, 10);
+
+        if (display.length === 0) {
           const scope = currentProject ? `项目 ${currentProject} 下` : '';
           await reply(`没有发现${scope}可用的会话。`);
           return;
         }
-        const lines: string[] = [];
-        for (let i = 0; i < sessions.length; i++) {
-          const s = sessions[i];
-          const ago = formatTimeAgo(s.lastModified);
-          const status = s.isActive ? ' · 🔒 使用中' : '';
-          const title = s.summary !== s.sessionId.slice(0, 8) ? `**${s.summary}**` : '_(未命名)_';
-          lines.push(`${i + 1}. ${title}${status}\n    🕐 ${ago} · ID: ${s.sessionId.slice(0, 8)}`);
-        }
-        lines.push('---\n/session resume ID 恢复会话');
+
+        const lines = display.map((item, i) => `${i + 1}. ${item.line}`);
+        lines.push('---\n/session resume ID 恢复 · /session fork 分叉');
         const headerTitle = currentProject ? `📋 ${currentProject} 的会话` : '📋 所有会话';
         await sendCard(ctx.chatId, {
           header: { title: { tag: 'plain_text', content: headerTitle }, template: 'blue' },
@@ -451,12 +488,56 @@ async function handleCommand(
       }
 
       if (cmd.action === 'resume') {
-        if (ctx.chatType === 'group') {
-          await reply('群聊中不支持恢复 CLI 会话，请在单聊中使用 /session resume');
-          return;
-        }
         const idPrefix = cmd.args[0];
         if (!idPrefix) { await reply('用法: /session resume <ID>'); return; }
+
+        // First try: match bot session by ID prefix
+        const botSession = db.findBotSessionByIdPrefix(idPrefix);
+        if (botSession) {
+          // For group: check it belongs to this group
+          if (ctx.chatType === 'group') {
+            if (botSession.feishu_user_id !== `group:${ctx.chatId}`) {
+              await reply('该会话不属于当前群聊');
+              return;
+            }
+          } else {
+            if (botSession.feishu_user_id !== ctx.senderId) {
+              await reply('该会话不属于你');
+              return;
+            }
+          }
+          if (!botSession.claude_session_id) {
+            await reply('该会话没有对话记录，无法恢复');
+            return;
+          }
+          // Touch to make it the active session
+          db.touchSession(botSession.id);
+          // If in CLI resume mode, exit it
+          if (ctx.chatType !== 'group') {
+            const currentUser = db.getUser(ctx.senderId);
+            if (currentUser?.resumed_session_id) {
+              db.clearResumedSession(ctx.senderId);
+            }
+          }
+          const title = botSession.title || '_(未命名)_';
+          const lines = [
+            `**${title}**`,
+            `ID: ${botSession.id.slice(0, 8)}`,
+            '---',
+            '会话已切换，直接发消息继续对话。',
+          ];
+          await sendCard(ctx.chatId, {
+            header: { title: { tag: 'plain_text', content: '🔄 已切换会话' }, template: 'green' },
+            elements: [{ tag: 'markdown', content: lines.join('\n') }],
+          }, threadId, replyMsgId);
+          return;
+        }
+
+        // Second try: match CLI session (P2P only)
+        if (ctx.chatType === 'group') {
+          await reply(`未找到 ID 以 "${idPrefix}" 开头的会话`);
+          return;
+        }
 
         const session = findSessionById(idPrefix);
         if (!session) { await reply(`未找到 ID 以 "${idPrefix}" 开头的会话`); return; }
@@ -531,6 +612,11 @@ async function handleCommand(
         try {
           const { renameSession } = await import('@anthropic-ai/claude-agent-sdk');
           await renameSession(sessionId, title);
+          // Sync title to DB for bot sessions
+          const botSession = db.findSessionByClaudeSessionId(sessionId);
+          if (botSession) {
+            db.setSessionTitle(botSession.id, title);
+          }
           await reply(`会话已命名: ${title}`);
         } catch (err: any) {
           await reply(`命名失败: ${err.message}`);
@@ -562,7 +648,89 @@ async function handleCommand(
         return;
       }
 
-      await reply('用法: /session list | resume <ID> | rename <名称> | new | exit');
+      if (cmd.action === 'fork') {
+        let effectiveSessionId: string | null = null;
+        let effectiveCwd: string = '';
+        let effectiveUserId = ctx.senderId;
+        let effectiveTopicId = ctx.threadId;
+        let effectiveProjectName: string;
+
+        if (ctx.chatType === 'group') {
+          // Permission check: admin, group admin, or thread creator
+          let canFork = isAdmin(ctx.senderId, config) || await isGroupAdmin(ctx.chatId, ctx.senderId);
+          if (!canFork && ctx.threadId) {
+            const binding = db.getThreadBinding(ctx.chatId, ctx.threadId);
+            if (binding?.creatorUserId === ctx.senderId) canFork = true;
+          }
+          if (!canFork) {
+            await reply('只有群管理员或话题发起者可以分叉会话');
+            return;
+          }
+          const groupProject = await resolveGroupProject(ctx.chatId, ctx.threadId, db, projectManager);
+          effectiveProjectName = groupProject.projectName;
+          effectiveCwd = groupProject.projectPath;
+          const session = sessionManager.getOrCreateGroup(ctx.chatId, ctx.threadId, effectiveProjectName);
+          effectiveSessionId = session.claude_session_id;
+          effectiveUserId = `group:${ctx.chatId}`;
+          effectiveTopicId = ctx.threadId;
+        } else {
+          const currentUser = db.getUser(ctx.senderId);
+          // Check if resuming a CLI session
+          if (currentUser?.resumed_session_id && currentUser?.resumed_cwd) {
+            effectiveSessionId = currentUser.resumed_session_id;
+            effectiveCwd = currentUser.resumed_cwd;
+          } else {
+            effectiveCwd = currentUser?.active_cwd || projectManager.resolve(currentUser?.active_project || DEFAULT_PROJECT_LABEL) || '';
+          }
+          effectiveProjectName = currentUser?.active_project || DEFAULT_PROJECT_LABEL;
+          if (!effectiveSessionId) {
+            const session = sessionManager.getOrCreate(ctx.senderId, ctx.threadId, effectiveProjectName);
+            effectiveSessionId = session.claude_session_id;
+          }
+        }
+
+        if (!effectiveSessionId) {
+          await reply('当前没有可分叉的会话（还没有进行过对话）');
+          return;
+        }
+
+        const title = cmd.args.length > 0 ? cmd.args.join(' ') : undefined;
+        try {
+          const forked = await sessionManager.fork(
+            effectiveUserId,
+            effectiveTopicId,
+            effectiveProjectName,
+            effectiveSessionId,
+            effectiveCwd,
+            title,
+          );
+
+          // If was resuming CLI session, exit resume mode
+          if (ctx.chatType !== 'group') {
+            const currentUser = db.getUser(ctx.senderId);
+            if (currentUser?.resumed_session_id) {
+              db.clearResumedSession(ctx.senderId);
+            }
+          }
+
+          const titleDisplay = title ? `**${title}**` : '_(未命名)_';
+          const lines = [
+            `从会话 ${effectiveSessionId.slice(0, 8)} 分叉成功`,
+            `新会话: ${titleDisplay}`,
+            `ID: ${forked.id.slice(0, 8)}`,
+          ];
+          lines.push('---', '直接发消息开始在新分支中对话。');
+          await sendCard(ctx.chatId, {
+            header: { title: { tag: 'plain_text', content: '🔀 会话已分叉' }, template: 'purple' },
+            elements: [{ tag: 'markdown', content: lines.join('\n') }],
+          }, threadId, replyMsgId);
+        } catch (err: any) {
+          await reply(`分叉失败: ${err.message}`);
+        }
+        return;
+      }
+
+      await reply('用法: /session list | resume <ID> | fork [标题] | rename <名称> | new | exit');
       return;
     }
   }
