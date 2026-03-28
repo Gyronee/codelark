@@ -291,3 +291,53 @@ describe('Integration: full session', () => {
     expect(rendered).toContain('⏳ Read: src/b.ts (3s...)');
   });
 });
+
+// ---------------------------------------------------------------------------
+// 6. Full session with agent collapse
+// ---------------------------------------------------------------------------
+describe('full session with agent collapse', () => {
+  it('renders agent expanded then collapsed after completion', () => {
+    const state = new ToolRenderState();
+
+    // Main task reads files
+    state.addTool({ toolUseId: 't1', name: 'Read', detail: 'src/index.ts', parentToolUseId: null });
+    state.completeTool('t1', 'done', 0.8);
+    state.addTool({ toolUseId: 't2', name: 'Read', detail: 'src/config.ts', parentToolUseId: null });
+    state.completeTool('t2', 'done', 1.0);
+
+    // Main task edits
+    state.addTool({ toolUseId: 't3', name: 'Edit', detail: 'src/config.ts', parentToolUseId: null });
+    state.completeTool('t3', 'done', 1.5);
+
+    // Agent spawned
+    state.addAgent('agent1', 'code-reviewer');
+    state.addTool({ toolUseId: 'a1t1', name: 'Read', detail: 'src/card/builder.ts', parentToolUseId: 'agent1' });
+    state.completeTool('a1t1', 'done', 0.6);
+    state.addTool({ toolUseId: 'a1t2', name: 'Read', detail: 'src/card/streaming-card.ts', parentToolUseId: 'agent1' });
+    state.completeTool('a1t2', 'done', 0.7);
+    state.addTool({ toolUseId: 'a1t3', name: 'Read', detail: 'src/claude/executor.ts', parentToolUseId: 'agent1' });
+    state.completeTool('a1t3', 'done', 0.5);
+
+    // Agent still running — should show expanded
+    let lines = state.render().split('\n');
+    expect(lines[0]).toBe('✓ Read 2 files (1.8s)');
+    expect(lines[1]).toBe('  src/index.ts, src/config.ts');
+    expect(lines[2]).toBe('✓ Edit: src/config.ts (1.5s)');
+    expect(lines[3]).toBe('▶ Agent: code-reviewer');
+    expect(lines[4]).toBe('  ✓ Read 3 files (1.8s)');
+    expect(lines[5]).toBe('    src/card/builder.ts, src/card/streaming-card.ts, src/claude/executor.ts');
+
+    // Agent completes
+    state.completeAgent('agent1');
+
+    // Main task continues
+    state.addTool({ toolUseId: 't4', name: 'Bash', detail: 'npx tsc --noEmit', parentToolUseId: null });
+
+    lines = state.render().split('\n');
+    expect(lines[0]).toBe('✓ Read 2 files (1.8s)');
+    expect(lines[1]).toBe('  src/index.ts, src/config.ts');
+    expect(lines[2]).toBe('✓ Edit: src/config.ts (1.5s)');
+    expect(lines[3]).toBe('✓ Agent: code-reviewer (3 tools, 1.8s)');
+    expect(lines[4]).toBe('⏳ Bash: npx tsc --noEmit');
+  });
+});
