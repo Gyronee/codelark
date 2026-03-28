@@ -6,7 +6,7 @@
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import type * as lark from '@larksuiteoapi/node-sdk';
+import * as lark from '@larksuiteoapi/node-sdk';
 import { assertOk, toToolResult, type WithTokenFn } from './feishu-oapi.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -75,7 +75,7 @@ export async function handleDriveFile(
             direction: p.direction,
           },
         },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       const data = res.data;
@@ -103,7 +103,7 @@ export async function handleDriveFile(
             request_docs: p.request_docs,
           },
         },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       log.info({ count: res.data?.metas?.length ?? 0 }, 'drive_file get_meta done');
@@ -130,7 +130,7 @@ export async function handleDriveFile(
             folder_token: targetFolderToken,
           },
         },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       log.info({ file_token: (res.data?.file as any)?.token }, 'drive_file copy done');
@@ -155,7 +155,7 @@ export async function handleDriveFile(
             folder_token: p.folder_token,
           },
         },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       log.info({ file_token: p.file_token, task_id: res.data?.task_id }, 'drive_file move done');
@@ -181,7 +181,7 @@ export async function handleDriveFile(
             type: p.type,
           },
         },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       log.info({ file_token: p.file_token, task_id: res.data?.task_id }, 'drive_file delete done');
@@ -241,7 +241,7 @@ export async function handleDriveFile(
               file: fileBuffer,
             },
           },
-          { userAccessToken },
+          lark.withUserAccessToken(userAccessToken),
         );
         assertOk(res);
         log.info({ file_token: res.data?.file_token, file_name: fileName }, 'drive_file upload_all done');
@@ -261,7 +261,7 @@ export async function handleDriveFile(
               size: fileSize,
             },
           },
-          { userAccessToken },
+          lark.withUserAccessToken(userAccessToken),
         );
         assertOk(prepareRes);
         const { upload_id, block_size, block_num } = prepareRes.data;
@@ -281,14 +281,14 @@ export async function handleDriveFile(
                 file: chunkBuffer,
               },
             },
-            { userAccessToken },
+            lark.withUserAccessToken(userAccessToken),
           );
         }
 
         log.info({ upload_id, block_num }, 'drive_file upload_finish start');
         const finishRes = await (client.drive.file as any).uploadFinish(
           { data: { upload_id, block_num } },
-          { userAccessToken },
+          lark.withUserAccessToken(userAccessToken),
         );
         assertOk(finishRes);
         log.info({ file_token: finishRes.data?.file_token, file_name: fileName, chunks: block_num }, 'drive_file upload_finish done');
@@ -312,7 +312,7 @@ export async function handleDriveFile(
         {
           path: { file_token: p.file_token },
         },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
 
       const stream = res.getReadableStream();

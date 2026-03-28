@@ -6,7 +6,7 @@
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import type * as lark from '@larksuiteoapi/node-sdk';
+import * as lark from '@larksuiteoapi/node-sdk';
 import { assertOk, toToolResult, type WithTokenFn } from './feishu-oapi.js';
 import { logger } from '../logger.js';
 const log = logger.child({ module: 'tools/feishu-doc-comments' });
@@ -79,7 +79,7 @@ export async function handleDocComments(
     log.info({ file_token: params.file_token }, 'doc_comments resolving wiki token');
     const wikiNodeRes = await (client.wiki.space as any).getNode(
       { params: { token: params.file_token, obj_type: 'wiki' } },
-      { userAccessToken },
+      lark.withUserAccessToken(userAccessToken),
     );
     assertOk(wikiNodeRes);
     const node = wikiNodeRes.data?.node;
@@ -111,7 +111,7 @@ export async function handleDocComments(
           user_id_type: userIdType,
         },
       },
-      { userAccessToken },
+      lark.withUserAccessToken(userAccessToken),
     );
     assertOk(res);
     const items: any[] = res.data?.items ?? [];
@@ -137,7 +137,7 @@ export async function handleDocComments(
                     user_id_type: userIdType,
                   },
                 },
-                { userAccessToken },
+                lark.withUserAccessToken(userAccessToken),
               );
               const replyData = replyRes.data;
               if (replyRes.code === 0 && replyData?.items) {
@@ -189,7 +189,7 @@ export async function handleDocComments(
           },
         },
       },
-      { userAccessToken },
+      lark.withUserAccessToken(userAccessToken),
     );
     assertOk(res);
     log.info({ comment_id: (res.data as any)?.comment_id }, 'doc_comments comment created');
@@ -213,7 +213,7 @@ export async function handleDocComments(
         params: { file_type: actualFileType },
         data: { is_solved: params.is_solved_value },
       },
-      { userAccessToken },
+      lark.withUserAccessToken(userAccessToken),
     );
     assertOk(res);
     log.info({ comment_id: params.comment_id, is_solved: params.is_solved_value }, 'doc_comments patch done');

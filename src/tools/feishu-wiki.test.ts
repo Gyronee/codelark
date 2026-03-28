@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+vi.mock('@larksuiteoapi/node-sdk', () => ({
+  withUserAccessToken: (token: string) => ({ userAccessToken: token }),
+}));
+
 vi.mock('./feishu-oapi.js', () => ({
   assertOk: (res: any) => { if (res.code !== 0) throw new Error(res.msg); },
 }));

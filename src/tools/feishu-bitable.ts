@@ -6,7 +6,7 @@
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import type * as lark from '@larksuiteoapi/node-sdk';
+import * as lark from '@larksuiteoapi/node-sdk';
 import { assertOk, toToolResult, type WithTokenFn } from './feishu-oapi.js';
 import { logger } from '../logger.js';
 const log = logger.child({ module: 'tools/feishu-bitable' });
@@ -48,7 +48,7 @@ export async function handleBitable(
       log.info({ action: 'create_app', name: params.name }, 'bitable create_app');
       const res = await client.bitable.app.create(
         { data: { name: params.name, folder_token: params.folder_token } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -58,7 +58,7 @@ export async function handleBitable(
       log.info({ action: 'get_app', app_token: params.app_token }, 'bitable get_app');
       const res = await client.bitable.app.get(
         { path: { app_token: params.app_token! } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -68,7 +68,7 @@ export async function handleBitable(
       log.info({ action: 'copy_app', app_token: params.app_token, name: params.name }, 'bitable copy_app');
       const res = await client.bitable.app.copy(
         { path: { app_token: params.app_token! }, data: { name: params.name, folder_token: params.folder_token } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -78,7 +78,7 @@ export async function handleBitable(
       log.info({ action: 'list_tables', app_token: params.app_token }, 'bitable list_tables');
       const res = await client.bitable.appTable.list(
         { path: { app_token: params.app_token! }, params: { page_size: params.page_size, page_token: params.page_token } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -88,7 +88,7 @@ export async function handleBitable(
       log.info({ action: 'create_table', app_token: params.app_token, name: params.name }, 'bitable create_table');
       const res = await client.bitable.appTable.create(
         { path: { app_token: params.app_token! }, data: { table: { name: params.name, fields: params.fields as any } } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -98,7 +98,7 @@ export async function handleBitable(
       log.info({ action: 'delete_table', app_token: params.app_token, table_id: params.table_id }, 'bitable delete_table');
       const res = await client.bitable.appTable.delete(
         { path: { app_token: params.app_token!, table_id: params.table_id! } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -108,7 +108,7 @@ export async function handleBitable(
       log.info({ action: 'list_views', app_token: params.app_token, table_id: params.table_id }, 'bitable list_views');
       const res = await client.bitable.appTableView.list(
         { path: { app_token: params.app_token!, table_id: params.table_id! }, params: { page_size: params.page_size, page_token: params.page_token } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -118,7 +118,7 @@ export async function handleBitable(
       log.info({ action: 'create_view', app_token: params.app_token, table_id: params.table_id }, 'bitable create_view');
       const res = await client.bitable.appTableView.create(
         { path: { app_token: params.app_token!, table_id: params.table_id! }, data: { view_name: params.view_name, view_type: params.view_type } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -128,7 +128,7 @@ export async function handleBitable(
       log.info({ action: 'delete_view', app_token: params.app_token, table_id: params.table_id, view_id: params.view_id }, 'bitable delete_view');
       const res = await client.bitable.appTableView.delete(
         { path: { app_token: params.app_token!, table_id: params.table_id!, view_id: params.view_id! } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -213,7 +213,7 @@ export async function handleBitableField(
       log.info({ action: 'list', app_token: params.app_token, table_id: params.table_id }, 'bitable_field list');
       const res = await client.bitable.appTableField.list(
         { path: { app_token: params.app_token, table_id: params.table_id }, params: { view_id: params.view_id, page_size: params.page_size, page_token: params.page_token } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -223,7 +223,7 @@ export async function handleBitableField(
       log.info({ action: 'create', app_token: params.app_token, table_id: params.table_id, field_name: params.field_name }, 'bitable_field create');
       const res = await client.bitable.appTableField.create(
         { path: { app_token: params.app_token, table_id: params.table_id }, data: { field_name: params.field_name!, type: params.type!, property: params.property as any } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -233,7 +233,7 @@ export async function handleBitableField(
       log.info({ action: 'update', app_token: params.app_token, table_id: params.table_id, field_id: params.field_id }, 'bitable_field update');
       const res = await client.bitable.appTableField.update(
         { path: { app_token: params.app_token, table_id: params.table_id, field_id: params.field_id! }, data: { field_name: params.field_name, type: params.type, property: params.property as any } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -243,7 +243,7 @@ export async function handleBitableField(
       log.info({ action: 'delete', app_token: params.app_token, table_id: params.table_id, field_id: params.field_id }, 'bitable_field delete');
       const res = await client.bitable.appTableField.delete(
         { path: { app_token: params.app_token, table_id: params.table_id, field_id: params.field_id! } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -330,7 +330,7 @@ export async function handleBitableRecord(
             page_token: params.page_token,
           },
         },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -340,7 +340,7 @@ export async function handleBitableRecord(
       log.info({ action: 'get', app_token: params.app_token, table_id: params.table_id, record_id: params.record_id }, 'bitable_record get');
       const res = await client.bitable.appTableRecord.get(
         { path: { app_token: params.app_token, table_id: params.table_id, record_id: params.record_id! } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -363,7 +363,7 @@ export async function handleBitableRecord(
             user_id_type: 'open_id',
           },
         },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -373,7 +373,7 @@ export async function handleBitableRecord(
       log.info({ action: 'create', app_token: params.app_token, table_id: params.table_id }, 'bitable_record create');
       const res = await client.bitable.appTableRecord.create(
         { path: { app_token: params.app_token, table_id: params.table_id }, data: { fields: params.fields! } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -383,7 +383,7 @@ export async function handleBitableRecord(
       log.info({ action: 'batch_create', app_token: params.app_token, table_id: params.table_id, count: params.records?.length }, 'bitable_record batch_create');
       const res = await client.bitable.appTableRecord.batchCreate(
         { path: { app_token: params.app_token, table_id: params.table_id }, data: { records: params.records as any } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -393,7 +393,7 @@ export async function handleBitableRecord(
       log.info({ action: 'update', app_token: params.app_token, table_id: params.table_id, record_id: params.record_id }, 'bitable_record update');
       const res = await client.bitable.appTableRecord.update(
         { path: { app_token: params.app_token, table_id: params.table_id, record_id: params.record_id! }, data: { fields: params.fields! } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -403,7 +403,7 @@ export async function handleBitableRecord(
       log.info({ action: 'batch_update', app_token: params.app_token, table_id: params.table_id, count: params.records?.length }, 'bitable_record batch_update');
       const res = await client.bitable.appTableRecord.batchUpdate(
         { path: { app_token: params.app_token, table_id: params.table_id }, data: { records: params.records as any } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -413,7 +413,7 @@ export async function handleBitableRecord(
       log.info({ action: 'delete', app_token: params.app_token, table_id: params.table_id, record_id: params.record_id }, 'bitable_record delete');
       const res = await client.bitable.appTableRecord.delete(
         { path: { app_token: params.app_token, table_id: params.table_id, record_id: params.record_id! } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;
@@ -423,7 +423,7 @@ export async function handleBitableRecord(
       log.info({ action: 'batch_delete', app_token: params.app_token, table_id: params.table_id, count: params.record_ids?.length }, 'bitable_record batch_delete');
       const res = await client.bitable.appTableRecord.batchDelete(
         { path: { app_token: params.app_token, table_id: params.table_id }, data: { records: params.record_ids! } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       return res.data;

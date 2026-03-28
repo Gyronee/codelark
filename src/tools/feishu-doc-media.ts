@@ -6,7 +6,7 @@
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import type * as lark from '@larksuiteoapi/node-sdk';
+import * as lark from '@larksuiteoapi/node-sdk';
 import { assertOk, toToolResult, type WithTokenFn } from './feishu-oapi.js';
 import * as fs from 'fs/promises';
 import { createReadStream } from 'fs';
@@ -181,7 +181,7 @@ async function handleInsert(
       },
       params: { document_revision_id: -1 },
     },
-    { userAccessToken },
+    lark.withUserAccessToken(userAccessToken),
   );
   assertOk(createRes);
 
@@ -213,7 +213,7 @@ async function handleInsert(
         extra: JSON.stringify({ drive_route_token: documentId }),
       },
     },
-    { userAccessToken },
+    lark.withUserAccessToken(userAccessToken),
   );
 
   const fileToken = uploadRes?.file_token ?? uploadRes?.data?.file_token;
@@ -244,7 +244,7 @@ async function handleInsert(
       data: { requests: [patchRequest] },
       params: { document_revision_id: -1 },
     },
-    { userAccessToken },
+    lark.withUserAccessToken(userAccessToken),
   );
   assertOk(patchRes);
 
@@ -269,12 +269,12 @@ async function handleDownload(
   if (p.resource_type === 'media') {
     res = await (client.drive.v1.media as any).download(
       { path: { file_token: p.resource_token } },
-      { userAccessToken },
+      lark.withUserAccessToken(userAccessToken),
     );
   } else {
     res = await (client.board.v1.whiteboard as any).downloadAsImage(
       { path: { whiteboard_id: p.resource_token } },
-      { userAccessToken },
+      lark.withUserAccessToken(userAccessToken),
     );
   }
 

@@ -1,5 +1,10 @@
 // src/tools/feishu-bitable.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('@larksuiteoapi/node-sdk', () => ({
+  withUserAccessToken: (token: string) => ({ userAccessToken: token }),
+}));
+
 import { handleBitable, handleBitableField, handleBitableRecord } from './feishu-bitable.js';
 
 function mockClient() {

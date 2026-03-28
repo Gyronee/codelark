@@ -8,7 +8,7 @@
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import type * as lark from '@larksuiteoapi/node-sdk';
+import * as lark from '@larksuiteoapi/node-sdk';
 import { assertOk, toToolResult, type WithTokenFn } from './feishu-oapi.js';
 import { logger } from '../logger.js';
 const log = logger.child({ module: 'tools/feishu-wiki' });
@@ -78,7 +78,7 @@ export async function handleWikiSpace(
             page_token: params.page_token,
           },
         },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       const data = res.data;
@@ -98,7 +98,7 @@ export async function handleWikiSpace(
       log.info({ action: 'get', space_id: params.space_id }, 'wiki_space action=get');
       const res = await (client.wiki.space as any).get(
         { path: { space_id: params.space_id } },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       log.info({ space_id: params.space_id }, 'wiki_space get done');
@@ -117,7 +117,7 @@ export async function handleWikiSpace(
             description: params.description,
           },
         },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       const createdSpaceId = (res.data?.space as any)?.id;
@@ -148,7 +148,7 @@ export async function handleWikiSpaceNode(
             parent_node_token: params.parent_node_token,
           },
         },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       const data = res.data;
@@ -173,7 +173,7 @@ export async function handleWikiSpaceNode(
             obj_type: params.obj_type ?? 'wiki',
           },
         },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       log.info({ token: params.token }, 'wiki_space_node get done');
@@ -197,7 +197,7 @@ export async function handleWikiSpaceNode(
             title: params.title,
           },
         },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       const createdNodeToken = (res.data?.node as any)?.node_token;
@@ -222,7 +222,7 @@ export async function handleWikiSpaceNode(
             target_parent_token: params.target_parent_token,
           },
         },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       log.info({ node_token: params.node_token }, 'wiki_space_node move done');
@@ -248,7 +248,7 @@ export async function handleWikiSpaceNode(
             title: params.title,
           },
         },
-        { userAccessToken },
+        lark.withUserAccessToken(userAccessToken),
       );
       assertOk(res);
       const copiedNodeToken = (res.data?.node as any)?.node_token;
