@@ -351,11 +351,12 @@ async function handleCommand(
           'docx:document:create',
           'docx:document:readonly',
           'docx:document:write_only',
-          'search:docs_wiki:readonly',
+          'search:search:readonly',
           'wiki:wiki:readonly',
           'wiki:wiki',
           'drive:drive:readonly',
           'drive:drive',
+          'bitable:bitable',
         ].join(' ');
         const deviceAuth = await requestDeviceAuthorization(config.feishu.appId, config.feishu.appSecret, scopes);
         const card = buildOAuthCard(deviceAuth.verificationUriComplete, deviceAuth.userCode);
