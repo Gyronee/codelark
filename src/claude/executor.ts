@@ -5,6 +5,7 @@ import { join } from 'path';
 import { logger } from '../logger.js';
 import { type ToolStatus, extractThinkingContent, stripThinkingTags } from '../card/builder.js';
 import { createFeishuDocServer } from '../tools/feishu-doc-server.js';
+import { feishuToolsGuide } from './feishu-tools-guide.js';
 import type { Database } from '../session/db.js';
 
 function getLocalPlugins(): Array<{ type: 'local'; path: string }> {
@@ -78,13 +79,15 @@ export async function executeClaudeTask(
   let reasoningElapsedMs = 0;
   let wasInReasoning = false;
 
-  // Build MCP servers for this user
+  // Build MCP servers and tools guide for this user
   const mcpServers: Record<string, any> = {};
+  let feishuPromptAppend = '';
   if (userId && db) {
     const appId = process.env.FEISHU_APP_ID ?? '';
     const appSecret = process.env.FEISHU_APP_SECRET ?? '';
     if (appId && appSecret) {
       mcpServers['feishu-docs'] = createFeishuDocServer(userId, db, appId, appSecret);
+      feishuPromptAppend = feishuToolsGuide;
     }
   }
 
@@ -123,7 +126,11 @@ export async function executeClaudeTask(
           }
           return { behavior: 'deny' as const, message: 'User denied the operation' };
         },
-        systemPrompt: { type: 'preset', preset: 'claude_code' },
+        systemPrompt: {
+          type: 'preset',
+          preset: 'claude_code',
+          ...(feishuPromptAppend ? { append: feishuPromptAppend } : {}),
+        },
         settingSources: ['user', 'project', 'local'],
         plugins: getLocalPlugins(),
         includePartialMessages: true,
