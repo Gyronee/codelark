@@ -150,6 +150,7 @@ export class StreamingCard {
   }
 
   async updateToolStatus(content: string): Promise<void> {
+    if (content === this.lastToolStatus) return;
     this.lastToolStatus = content;
     if (this.isTerminal) return;
     // Create card on first tool status update (tools may arrive before text)

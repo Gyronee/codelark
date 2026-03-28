@@ -83,9 +83,7 @@ function groupTools(entries: ToolEntry[]): RenderItem[] {
       if (
         last.type === 'batch' &&
         last.toolName === entry.name &&
-        // Only batch done items into done batches (not error)
-        entry.status === 'done' &&
-        last.entries.every(e => e.status === 'done')
+        entry.status === 'done'
       ) {
         last.entries.push(entry);
         continue;
