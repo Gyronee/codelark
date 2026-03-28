@@ -869,7 +869,9 @@ async function handleClaudeTask(
       }
     },
     onToolStart: (toolUseId, tool, detail, parentToolUseId) => {
-      toolState.addTool({ toolUseId, name: tool, detail, parentToolUseId });
+      if (tool !== 'Agent') {
+        toolState.addTool({ toolUseId, name: tool, detail, parentToolUseId });
+      }
       void card.updateToolStatus(toolState.render());
     },
     onToolEnd: (toolUseId, _resultSummary) => {

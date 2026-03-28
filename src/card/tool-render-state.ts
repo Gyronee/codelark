@@ -169,19 +169,19 @@ export class ToolRenderState {
     toolUseId: string;
     name: string;
     detail: string;
-    parentToolUseId?: string;
+    parentToolUseId?: string | null;
   }): void {
     const entry: ToolEntry = {
       toolUseId: opts.toolUseId,
       name: opts.name,
       detail: opts.detail,
       status: 'running',
-      parentToolUseId: opts.parentToolUseId,
+      parentToolUseId: opts.parentToolUseId ?? undefined,
     };
 
     this.toolIndex.set(opts.toolUseId, entry);
 
-    if (opts.parentToolUseId && this.agentIndex.has(opts.parentToolUseId)) {
+    if (opts.parentToolUseId != null && this.agentIndex.has(opts.parentToolUseId)) {
       // Child of a known agent
       this.agentIndex.get(opts.parentToolUseId)!.tools.push(opts.toolUseId);
     } else {
