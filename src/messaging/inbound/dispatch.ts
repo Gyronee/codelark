@@ -351,7 +351,7 @@ async function handleCommand(
           'docx:document:create',
           'docx:document:readonly',
           'docx:document:write_only',
-          'search:search:readonly',
+          'search:docs:read',
           'wiki:wiki:readonly',
           'wiki:wiki',
           'drive:drive:readonly',
